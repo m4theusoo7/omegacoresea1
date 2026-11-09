@@ -1,0 +1,384 @@
+-- ==============================================================================
+-- OMEGA CORE: SEA 1 DOMINATION (AI & Bézier Pathfinding)
+-- Desenvolvido para Delta Executor
+-- ==============================================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- Variáveis Globais de Estado
+getgenv().OmegaCore_AutoFarm = false
+getgenv().OmegaCore_ServerHop = false
+
+-- ==============================================================================
+-- [ BANCO DE DADOS: BOSSES, DROPS E QUESTS DO SEA 1 ]
+-- ==============================================================================
+
+-- Tabela de Bosses e seus Drops. O script só os caça se você NÃO tiver o item.
+local BossesSea1 = {
+    {Nome = "Bobby", Drop = "Chop"},
+    {Nome = "Yeti", Drop = "Yeti Sword"},
+    {Nome = "Vice Admiral", Drop = "Vice Admiral's Coat"},
+    {Nome = "Swan", Drop = "Pink Coat"},
+    {Nome = "Chief Warden", Drop = "Warden Sword"},
+    {Nome = "Warden", Drop = "Warden Sword"},
+    {Nome = "Cyborg", Drop = "Cool Shades"},
+    {Nome = "Saber Expert", Drop = "Saber"},
+    {Nome = "Magma Admiral", Drop = "Magma Blade"},
+    {Nome = "Fishman Lord", Drop = "Trident"}
+}
+
+-- Tabela Estrutural de Níveis (Exemplo prático, adicione as coordenadas do seu servidor)
+local ZonasDeFarm = {
+    {LvlMin = 1, LvlMax = 9, Mob = "Bandit", Quest = "BanditQuest1", NpcPos = CFrame.new(1059, 16, 1549), MobPos = CFrame.new(1148, 16, 1610)},
+    {LvlMin = 10, LvlMax = 14, Mob = "Monkey", Quest = "JungleQuest", NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1449, 22, 105)},
+    -- O motor de IA lerá esta tabela para decidir para onde ir se não houver boss ou fruta.
+}
+
+-- ==============================================================================
+-- [ MÓDULO 1: RADAR CUSTOMIZADO (DRAWING API - INVISÍVEL) ]
+-- ==============================================================================
+local RadarStatus = Drawing.new("Text")
+RadarStatus.Visible = true
+RadarStatus.Position = Vector2.new(20, 200)
+RadarStatus.Color = Color3.fromRGB(0, 255, 255)
+RadarStatus.Size = 20
+RadarStatus.Center = false
+RadarStatus.Outline = true
+RadarStatus.Font = 2
+RadarStatus.Text = "[ Omega Core ]: Aguardando..."
+
+local function AtualizarRadar(acao, alvo, detalhe)
+    local msg = "[ OMEGA CORE ]\n"
+    msg = msg .. "Auto Farm: " .. tostring(getgenv().OmegaCore_AutoFarm) .. "\n"
+    msg = msg .. "Auto Hop: " .. tostring(getgenv().OmegaCore_ServerHop) .. "\n"
+    msg = msg .. "------------------\n"
+    msg = msg .. "Ação: " .. acao .. "\n"
+    if alvo then msg = msg .. "Alvo: " .. alvo .. "\n" end
+    if detalhe then msg = msg .. "Info: " .. detalhe end
+    
+    RadarStatus.Text = msg
+end
+
+-- ==============================================================================
+-- [ MÓDULO 2: SISTEMA MEMORY-LEAK FREE SERVER HOP (PERSISTÊNCIA) ]
+-- ==============================================================================
+local function ExecutarServerHop()
+    if not getgenv().OmegaCore_ServerHop then return end
+    AtualizarRadar("Analisando", "Servidor Seco", "Iniciando Salto (Hop)...")
+    
+    local TPS = game:GetService("TeleportService")
+    local ApiUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local visitedFile = "OmegaCore_VisitedServers.json"
+    local visited = {}
+    
+    if isfile and isfile(visitedFile) then
+        local success, result = pcall(function() return HttpService:JSONDecode(readfile(visitedFile)) end)
+        if success then visited = result end
+    end
+    
+    if #visited > 50 then visited = {} end
+    table.insert(visited, game.JobId)
+    if writefile then writefile(visitedFile, HttpService:JSONEncode(visited)) end
+
+    local function Pular()
+        local servers = HttpService:JSONDecode(game:HttpGet(ApiUrl))
+        if servers and servers.data then
+            for _, srv in pairs(servers.data) do
+                if type(srv) == "table" and srv.playing < srv.maxPlayers - 1 and srv.id ~= game.JobId then
+                    local jaVisitou = false
+                    for _, id in pairs(visited) do
+                        if id == srv.id then jaVisitou = true break end
+                    end
+                    if not jaVisitou then
+                        TPS:TeleportToPlaceInstance(game.PlaceId, srv.id, player)
+                        task.wait(5)
+                    end
+                end
+            end
+        end
+    end
+    pcall(Pular)
+end
+
+-- ==============================================================================
+-- [ MÓDULO 3: MOTOR DE VOO INDETECTÁVEL (CURVAS DE BÉZIER) ]
+-- ==============================================================================
+local function CalcularBezier(t, p0, p1, p2)
+    return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
+end
+
+local noclipCon
+local function VooBezierInteligente(targetCFrame)
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hrp = char.HumanoidRootPart
+
+    if noclipCon then noclipCon:Disconnect() end
+    noclipCon = RunService.Stepped:Connect(function()
+        if char then
+            for _, p in pairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end
+    end)
+
+    local startPos = hrp.Position
+    local endPos = targetCFrame.Position
+    local distance = (startPos - endPos).Magnitude
+    
+    if distance < 30 then
+        hrp.CFrame = targetCFrame
+        if noclipCon then noclipCon:Disconnect() end
+        return true
+    end
+
+    -- Cria o arco matemático de desvio
+    local offset = Vector3.new(math.random(-100, 100), math.random(100, 200), math.random(-100, 100))
+    local controlPoint = startPos:Lerp(endPos, 0.5) + offset
+    local tempoTotal = distance / 320
+    local tempoPassado = 0
+
+    while tempoPassado < tempoTotal do
+        if not getgenv().OmegaCore_AutoFarm then break end
+        tempoPassado = tempoPassado + RunService.Heartbeat:Wait()
+        local t = math.clamp(tempoPassado / tempoTotal, 0, 1)
+        
+        -- Easing suave
+        local tOtimizado = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
+        local novaPos = CalcularBezier(tOtimizado, startPos, controlPoint, endPos)
+        hrp.CFrame = CFrame.new(novaPos, endPos)
+    end
+
+    if noclipCon then noclipCon:Disconnect() end
+    return true
+end
+
+-- ==============================================================================
+-- [ MÓDULO 4: MATRIZ DE PRIORIDADE DINÂMICA (IA DE DECISÃO) ]
+-- ==============================================================================
+
+local function PossuiDrop(nomeDrop)
+    -- Verifica se o Drop está na mochila ou equipado
+    local backpack = player:WaitForChild("Backpack")
+    local char = player.Character
+    if backpack:FindFirstChild(nomeDrop) then return true end
+    if char and char:FindFirstChild(nomeDrop) then return true end
+    
+    -- Se for acessório ou arma guardada, o jogo pode ter o save no ReplicatedStorage (depende da versão)
+    return false
+end
+
+local function UsarHabilidades()
+    -- Clica o Mouse e usa todas as skills
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
+        VirtualInputManager:SendKeyEvent(true, key, false, game)
+        VirtualInputManager:SendKeyEvent(false, key, false, game)
+    end
+end
+
+local function AnalisarMatriz()
+    -- PRIORIDADE 1: Frutas Míticas/Lendárias no chão
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
+            if string.find(obj.Name, "Dragon") or string.find(obj.Name, "Dough") or string.find(obj.Name, "Leopard") or string.find(obj.Name, "Kitsune") then
+                return {Tipo = "Fruta", Part = obj.Handle, Alvo = obj}
+            end
+        end
+    end
+
+    -- PRIORIDADE 3: Bosses com Drops Faltantes
+    if Workspace:FindFirstChild("Enemies") then
+        for _, enemy in pairs(Workspace.Enemies:GetChildren()) do
+            for _, boss in ipairs(BossesSea1) do
+                -- Se for o boss da lista e eu AINDA NÃO TENHO O DROP DELE
+                if string.find(enemy.Name, boss.Nome) and not PossuiDrop(boss.Drop) then
+                    if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                        return {Tipo = "Boss", Part = enemy:FindFirstChild("HumanoidRootPart"), Alvo = enemy, Drop = boss.Drop}
+                    end
+                end
+            end
+        end
+    end
+
+    -- PRIORIDADE 4: Auto Level (Se não houver fruta mítica nem boss pendente)
+    local meuLevel = player.Data.Level.Value
+    local zonaAtual = nil
+    for _, zona in ipairs(ZonasDeFarm) do
+        if meuLevel >= zona.LvlMin and meuLevel <= zona.LvlMax then
+            zonaAtual = zona
+            break
+        end
+    end
+    
+    if zonaAtual then
+        -- Aqui entraria a lógica de falar com o NPC da zonaAtual e depois matar o Mob
+        return {Tipo = "Farm", Part = CFrame.new(zonaAtual.MobPos.Position), Alvo = zonaAtual.Mob}
+    end
+
+    return nil
+end
+
+local function IA_CerebroLoop()
+    while task.wait(0.2) do
+        if not getgenv().OmegaCore_AutoFarm then continue end
+        
+        local char = player.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+        local hrp = char.HumanoidRootPart
+
+        local decisao = AnalisarMatriz()
+
+        if decisao then
+            AtualizarRadar("Caçando", decisao.Alvo.Name or decisao.Alvo, "Modo: " .. decisao.Tipo)
+            local dist = (hrp.Position - (typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position)).Magnitude
+
+            if dist > 30 then
+                -- Voo furtivo até o alvo
+                local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
+                if decisao.Tipo == "Boss" or decisao.Tipo == "Farm" then
+                    cframeDestino = cframeDestino * CFrame.new(0, 10, 0) -- Fica acima do alvo
+                end
+                VooBezierInteligente(cframeDestino)
+            else
+                -- Combate
+                local pos = typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position
+                hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(pos.X, hrp.Position.Y, pos.Z))
+                if decisao.Tipo ~= "Fruta" then
+                    UsarHabilidades()
+                end
+            end
+        else
+            -- Nenhuma missão, nenhum boss pendente vivo no mapa. Servidor seco.
+            AtualizarRadar("Limpeza Completa", "Servidor Seco", "Avaliando Server Hop...")
+            if getgenv().OmegaCore_ServerHop then
+                ExecutarServerHop()
+                task.wait(10)
+            end
+        end
+    end
+end
+
+-- ==============================================================================
+-- [ MÓDULO 5: INTERFACE DE USUÁRIO (MENU SUSPENSO) ]
+-- ==============================================================================
+local uiName = "OmegaCoreMenu"
+if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
+
+local sg = Instance.new("ScreenGui", CoreGui)
+sg.Name = uiName
+
+-- Botão Flutuante Principal
+local btnPrincipal = Instance.new("TextButton", sg)
+btnPrincipal.Size = UDim2.new(0, 60, 0, 60)
+btnPrincipal.Position = UDim2.new(0.5, -30, 0.05, 0)
+btnPrincipal.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+btnPrincipal.Text = "Ω"
+btnPrincipal.TextColor3 = Color3.fromRGB(0, 255, 255)
+btnPrincipal.Font = Enum.Font.FredokaOne
+btnPrincipal.TextSize = 35
+local uic1 = Instance.new("UICorner", btnPrincipal)
+uic1.CornerRadius = UDim.new(1, 0)
+local uis1 = Instance.new("UIStroke", btnPrincipal)
+uis1.Thickness = 2
+uis1.Color = Color3.fromRGB(0, 255, 255)
+
+-- Janela de Opções (Escondida por padrão)
+local painelMenu = Instance.new("Frame", sg)
+painelMenu.Size = UDim2.new(0, 220, 0, 140)
+painelMenu.Position = UDim2.new(0.5, -110, 0.15, 0)
+painelMenu.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+painelMenu.Visible = false
+local uic2 = Instance.new("UICorner", painelMenu)
+uic2.CornerRadius = UDim.new(0, 8)
+local uis2 = Instance.new("UIStroke", painelMenu)
+uis2.Thickness = 2
+uis2.Color = Color3.fromRGB(0, 255, 255)
+
+local titulo = Instance.new("TextLabel", painelMenu)
+titulo.Size = UDim2.new(1, 0, 0, 30)
+titulo.BackgroundTransparency = 1
+titulo.Text = "MODULOS OMEGA CORE"
+titulo.TextColor3 = Color3.fromRGB(255, 255, 255)
+titulo.Font = Enum.Font.Code
+titulo.TextSize = 16
+
+local btnAutoFarm = Instance.new("TextButton", painelMenu)
+btnAutoFarm.Size = UDim2.new(0.9, 0, 0, 35)
+btnAutoFarm.Position = UDim2.new(0.05, 0, 0.3, 0)
+btnAutoFarm.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+btnAutoFarm.Text = "IA Auto-Farm: OFF"
+btnAutoFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnAutoFarm.Font = Enum.Font.Code
+Instance.new("UICorner", btnAutoFarm).CornerRadius = UDim.new(0, 5)
+
+local btnServerHop = Instance.new("TextButton", painelMenu)
+btnServerHop.Size = UDim2.new(0.9, 0, 0, 35)
+btnServerHop.Position = UDim2.new(0.05, 0, 0.65, 0)
+btnServerHop.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+btnServerHop.Text = "Server Hop Persistente: OFF"
+btnServerHop.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnServerHop.Font = Enum.Font.Code
+Instance.new("UICorner", btnServerHop).CornerRadius = UDim.new(0, 5)
+
+-- Lógica dos Botões UI
+btnPrincipal.MouseButton1Click:Connect(function()
+    painelMenu.Visible = not painelMenu.Visible
+end)
+
+btnAutoFarm.MouseButton1Click:Connect(function()
+    getgenv().OmegaCore_AutoFarm = not getgenv().OmegaCore_AutoFarm
+    if getgenv().OmegaCore_AutoFarm then
+        btnAutoFarm.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        btnAutoFarm.Text = "IA Auto-Farm: ON"
+    else
+        btnAutoFarm.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        btnAutoFarm.Text = "IA Auto-Farm: OFF"
+        AtualizarRadar("Desligado", nil, nil)
+    end
+end)
+
+btnServerHop.MouseButton1Click:Connect(function()
+    getgenv().OmegaCore_ServerHop = not getgenv().OmegaCore_ServerHop
+    if getgenv().OmegaCore_ServerHop then
+        btnServerHop.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        btnServerHop.Text = "Server Hop Persistente: ON"
+    else
+        btnServerHop.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        btnServerHop.Text = "Server Hop Persistente: OFF"
+    end
+end)
+
+-- Sistema Drag
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    btnPrincipal.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    painelMenu.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X - 80, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 70)
+end
+btnPrincipal.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging, dragStart, startPos = true, input.Position, btnPrincipal.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+    end
+end)
+btnPrincipal.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then update(input) end
+end)
+
+-- Inicializa Loop de IA
+task.spawn(IA_CerebroLoop)
