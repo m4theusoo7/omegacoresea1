@@ -1,284 +1,325 @@
--- [[ SISTEMA AUTÔNOMO DE CAÇA DINÂMICA - SEA 1 COMPLETE ]]
--- Desenvolvido para Delta Executor (Suporta Drawing API e File System)
+-- [[ SISTEMA AUTÔNOMO DE CAÇA DINÂMICA - BLOX FRUITS SEA 1 ]] --
+-- Otimizado para Delta Executor
 
-if not game:IsLoaded() then game.Loaded:Wait() end
-
--- CONSTANTES E REQUISITOS DO SEA 1
-local MAX_SEA1_LEVEL = 700
-local BOSS_DROPS = {
-    ["Saber Expert"] = {drop = "Saber", questDone = false},
-    ["The Saw"] = {drop = "Shark Saw", questDone = false},
-    ["Greybeard"] = {drop = "Biscuit", questDone = false}, -- Exemplo de drops Sea 1
-    ["Warden"] = {drop = "Warden Sword", questDone = false},
-    ["Chief Warden"] = {drop = "Chief Warden Sword", questDone = false},
-    ["Swan"] = {drop = "Pink Coat", questDone = false},
-    ["Magma Admiral"] = {drop = "Refined Musket", questDone = false},
-}
-
--- ESTADOS GLOBAIS
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
-local BotState = {
-    Active = false,
-    CurrentPriority = 4,
-    BlacklistedServers = {},
-    ObtainedItems = {}
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Configurações de Banco de Dados Local (Persistência)
+local FolderName = "RobynhoFut_AutoFarm"
+local ServerHopFile = FolderName .. "/VisitedServers.json"
+local BossDropsFile = FolderName .. "/AcquiredDrops.json"
+
+if not isfolder(FolderName) then makefolder(FolderName) end
+if not isfile(ServerHopFile) then writefile(ServerHopFile, HttpService:JSONEncode({})) end
+if not isfile(BossDropsFile) then writefile(BossDropsFile, HttpService:JSONEncode({})) end
+
+local VisitedServers = HttpService:JSONDecode(readfile(ServerHopFile))
+local AcquiredDrops = HttpService:JSONDecode(readfile(BossDropsFile))
+
+-- Variáveis Globais de Estado
+local SystemActive = false
+local CurrentPriority = "None"
+local RadarObjects = {}
+
+---------------------------------------------------------------------------
+-- MÓDULO 1: MOTOR DE VOO INDETECTÁVEL (CURVAS DE BÉZIER)
+---------------------------------------------------------------------------
+-- Gera um ponto de controle aleatório para criar a curva do arco
+local function getControlPoint(p0, p2)
+    local distance = (p2 - p0).Magnitude
+    local midPoint = p0:Lerp(p2, 0.5)
+    -- Eleva o ponto de controle baseado na distância para simular um salto parabólico
+    return midPoint + Vector3.new(math.random(-50, 50), distance * 0.3, math.random(-50, 50))
+end
+
+-- Fórmula Quadrática de Bézier
+local function calculateBezierPoint(t, p0, p1, p2)
+    return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
+end
+
+local function SmartFly(targetPosition)
+    local startPos = HumanoidRootPart.Position
+    local controlPoint = getControlPoint(startPos, targetPosition)
+    local duration = (startPos - targetPosition).Magnitude / 300 -- Velocidade segura
+    
+    local startTime = tick()
+    local connection
+    
+    connection = RunService.Heartbeat:Connect(function()
+        local elapsedTime = tick() - startTime
+        local t = math.clamp(elapsedTime / duration, 0, 1)
+        
+        -- Bypass Anti-Cheat: Evita colisões e mantém o CFrame atualizado suavemente
+        for _, part in pairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+        
+        local newPos = calculateBezierPoint(t, startPos, controlPoint, targetPosition)
+        HumanoidRootPart.CFrame = CFrame.new(newPos, targetPosition)
+        
+        -- Anti-Rubberband: Zera a velocidade física para o servidor não detectar impulsos irreais
+        HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        
+        if t >= 1 then
+            connection:Disconnect()
+        end
+    end)
+    
+    repeat task.wait(0.1) until (HumanoidRootPart.Position - targetPosition).Magnitude < 10
+end
+
+---------------------------------------------------------------------------
+-- MÓDULO 2: MATRIZ DE PRIORIDADE DINÂMICA E COMBATE
+---------------------------------------------------------------------------
+-- Simulação de uso de habilidades
+local function UseSkills()
+    local skills = {"Z", "X", "C", "V"}
+    for _, key in ipairs(skills) do
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[key], false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[key], false, game)
+        task.wait(0.2) -- Cooldown simulação humana
+    end
+end
+
+-- Banco de dados do Sea 1 (Exemplo estrutural)
+local Sea1Database = {
+    Bosses = {
+        {Name = "Saber Expert", Level = 200, Drop = "Saber", Pos = CFrame.new(-1461, 30, -51)},
+        {Name = "Vice Admiral", Level = 130, Drop = "Vice Admiral's Coat", Pos = CFrame.new(-4807, 21, 4360)},
+        {Name = "Cyborg", Level = 675, Drop = "Cool Shades", Pos = CFrame.new(6138, 10, 3939)}
+    }
 }
 
--- 1. MOTOR DE VOO INDETECTÁVEL (CURVAS DE BÉZIER QUADRÁTICAS)
-local function GetBezierPoint(p0, p1, p2, t)
-    -- Fórmula matemática: B(t) = (1-t)^2*P0 + 2(1-t)*t*P1 + t^2*P2
-    local part1 = (1 - t)^2 * p0
-    local part2 = 2 * (1 - t) * t * p1
-    local part3 = t^2 * p2
-    return part1 + part2 + part3
-end
-
-local function BezierTravel(targetPosition, speed)
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    local startPos = hrp.Position
-    local distance = (targetPosition - startPos).Magnitude
-    if distance < 10 then return end
-    
-    -- Cria um ponto de controle curvado para simular desvio humano e evitar detecção linear
-    local controlPos = startPos:Lerp(targetPosition, 0.5) + Vector3.new(math.random(-50, 50), math.random(30, 80), math.random(-50, 50))
-    
-    local steps = math.ceil(distance / (speed or 25))
-    for i = 1, steps do
-        if not BotState.Active then break end
-        local t = i / steps
-        local nextPos = GetBezierPoint(startPos, controlPos, targetPosition, t)
-        
-        -- Aplica velocidade variável sutil simulando input analógico
-        local speedModifier = 1 + (math.sin(t * math.pi) * 0.15)
-        hrp.CFrame = CFrame.new(nextPos, targetPosition)
-        task.wait(0.03 * (1 / speedModifier))
-    end
-    hrp.CFrame = CFrame.new(targetPosition)
-end
-
--- 2. MEMORY-LEAK FREE SERVER HOP (PERSISTÊNCIA EM ARQUIVOS)
-local FILE_NAME = "BloxFruits_ServerHop_Data.json"
-
-local function LoadHopData()
-    if isfile and isfile(FILE_NAME) then
-        local content = readfile(FILE_NAME)
-        local success, data = pcall(function() return HttpService:JSONDecode(content) end)
-        if success then BotState.BlacklistedServers = data end
-    end
-end
-
-local function SaveHopData()
-    if writefile then
-        writefile(FILE_NAME, HttpService:JSONEncode(BotState.BlacklistedServers))
-    end
-end
-
-local function SmartServerHop()
-    LoadHopData()
-    table.insert(BotState.BlacklistedServers, game.JobId)
-    SaveHopData()
-    
-    local servers = {}
-    local req = HttpService:JSONDecode(game:HttpGet("https://roblox.com" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-    
-    for _, server in pairs(req.data) do
-        if server.playing < server.maxPlayers and not table.find(BotState.BlacklistedServers, server.id) then
-            table.insert(servers, server.id)
+local function ScanEnvironment()
+    -- Prioridade 1: Frutas Físicas (Míticas/Lendárias)
+    for _, item in pairs(workspace:GetChildren()) do
+        if item.Name:find("Fruit") and item:IsA("Tool") then
+            -- Adicione lógica de raridade aqui se necessário
+            return {Type = "Fruit", Target = item}
         end
     end
     
-    if #servers > 0 then
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
-    else
-        -- Reseta a blacklist se todos os servidores já foram visitados
-        BotState.BlacklistedServers = {}
-        SaveHopData()
-    end
-end
-
--- 3. RADAR CUSTOMIZADO (DRAWING API - ANTI-DETECÇÃO)
-local RadarCircle = Drawing.new("Circle")
-RadarCircle.Color = Color3.fromRGB(0, 255, 100)
-RadarCircle.Thickness = 2
-RadarCircle.Radius = 150
-RadarCircle.Filled = false
-RadarCircle.Visible = false
-
-local function UpdateRadar()
-    while task.wait(0.1) do
-        if BotState.Active then
-            local mousePos = game:GetService("UserInputService"):GetMouseLocation()
-            RadarCircle.Position = mousePos
-            RadarCircle.Visible = true
-            -- O Delta renderiza diretamente na tela sem instanciar objetos no CoreGui
-        else
-            RadarCircle.Visible = false
-        end
-    end
-end
-task.spawn(UpdateRadar)
-
--- 4. MATRIZ DE PRIORIDADE DINÂMICA (IA DE DECISÃO E COMBATO)
-local function VerifyInventoryForDrop(dropName)
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local character = LocalPlayer.Character
-    if (backpack and backpack:FindFirstChild(dropName)) or (character and character:FindFirstChild(dropName)) then
-        return true
-    end
-    return false
-end
-
--- Simulação de rotação inteligente de habilidades (Estilo de Luta, Fruta, Arma)
-local function ExecuteCombatRotations(target)
-    local humanoid = target:FindFirstChildOfClass("Humanoid")
-    local hrp = target:FindFirstChild("HumanoidRootPart")
-    
-    if hrp and humanoid and humanoid.Health > 0 then
-        -- Trava posição logo acima ou atrás do alvo para evitar hitboxes de dano do boss
-        LocalPlayer.Character.HumanoidRootPart.CFrame = hrp.CFrame * CFrame.new(0, 5, 2)
-        
-        -- Varre o inventário por armas/estilos equipáveis e cicla skills Z, X, C, V
-        local tools = LocalPlayer.Backpack:GetChildren()
-        for _, tool in pairs(tools) do
-            if tool:IsA("Tool") then
-                LocalPlayer.Character.Humanoid:EquipTool(tool)
-                -- Virtual Input Simulator do Executor para disparar as teclas
-                if keypress then
-                    keypress(0x5A) task.wait(0.1) keyrelease(0x5A) -- Z
-                    keypress(0x58) task.wait(0.1) keyrelease(0x58) -- X
-                end
+    -- Prioridade 2: Bosses com Drops Faltantes
+    for _, bossData in pairs(Sea1Database.Bosses) do
+        if not AcquiredDrops[bossData.Drop] and LocalPlayer.Data.Level.Value >= bossData.Level then
+            local boss = workspace.Enemies:FindFirstChild(bossData.Name)
+            if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                return {Type = "Boss", Target = boss, Data = bossData}
             end
         end
     end
+    
+    -- Prioridade 3: Farm Level (Acesso Sea 2)
+    -- Lógica de busca do NPC de Quest correspondente ao Level do jogador iria aqui
+    return {Type = "LevelFarm"}
 end
 
 local function BrainLoop()
-    while task.wait(1) do
-        if not BotState.Active then continue end
-        
-        local currentLevel = LocalPlayer.Data.Level.Value
-        
-        -- PRIORIDADE 1: FRUTA MÍTICA NO CHÃO
-        local fruitFound = nil
-        for _, obj in pairs(Workspace:GetChildren()) do
-            if obj:IsA("Tool") and string.find(obj.name, "Fruit") then
-                -- Adicione checagem de raridade real se necessário
-                fruitFound = obj
-                break
-            end
-        end
-        
-        if fruitFound then
-            BotState.CurrentPriority = 1
-            BezierTravel(fruitFound.Handle.Position, 300)
-            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruitFound.Handle, 0)
-            continue
-        end
-        
-        -- PRIORIDADE 3: CAÇA A BOSSES COM DROP PENDENTE
-        local bossTarget = nil
-        for bossName, info in pairs(BOSS_DROPS) do
-            if not VerifyInventoryForDrop(info.drop) then
-                -- Checa se o Boss está vivo no Workspace
-                local enemy = Workspace.Enemies:FindFirstChild(bossName) or Workspace._WorldOrigin:FindFirstChild(bossName)
-                if enemy and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                    bossTarget = enemy
-                    break
+    task.spawn(function()
+        while task.wait(1) do
+            if not SystemActive then continue end
+            
+            local objective = ScanEnvironment()
+            CurrentPriority = objective.Type
+            
+            if objective.Type == "Fruit" then
+                SmartFly(objective.Target.Handle.Position)
+                firetouchinterest(HumanoidRootPart, objective.Target.Handle, 0)
+                firetouchinterest(HumanoidRootPart, objective.Target.Handle, 1)
+                
+            elseif objective.Type == "Boss" then
+                SmartFly(objective.Target.HumanoidRootPart.Position + Vector3.new(0, 15, 0))
+                -- Loop de ataque
+                while objective.Target.Humanoid.Health > 0 and SystemActive do
+                    HumanoidRootPart.CFrame = objective.Target.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
+                    UseSkills()
+                    -- Clique do mouse (Melee/Espada)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    task.wait(0.1)
                 end
-            else
-                BOSS_DROPS[bossName].questDone = true
+                
+                -- Se o boss morrer, verificamos se ganhamos o drop via UI ou Backpack
+                task.wait(2)
+                if LocalPlayer.Backpack:FindFirstChild(objective.Data.Drop) then
+                    AcquiredDrops[objective.Data.Drop] = true
+                    writefile(BossDropsFile, HttpService:JSONEncode(AcquiredDrops))
+                end
+                
+            elseif objective.Type == "LevelFarm" then
+                -- Se não há frutas e os bosses de interesse não estão vivos, farma level
+                -- Se o level for >= 700, iniciar quest do Sea 2 (Detective no Prison)
+                if LocalPlayer.Data.Level.Value >= 700 then
+                    -- Lógica de Quest do Sea 2 (Ice Admiral -> Sea 2)
+                    SystemActive = false
+                    print("Level 700 Atingido. Pronto para a Quest do Sea 2.")
+                end
             end
         end
-        
-        if bossTarget then
-            BotState.CurrentPriority = 3
-            BezierTravel(bossTarget.HumanoidRootPart.Position, 200)
-            -- Sistema de aumento de drop rate indireto: derrotar com ataques rápidos/estabilidade
-            ExecuteCombatRotations(bossTarget)
-            continue
+    end)
+end
+
+---------------------------------------------------------------------------
+-- MÓDULO 3: RADAR CUSTOMIZADO VIA DRAWING API (100% INVISÍVEL)
+---------------------------------------------------------------------------
+local function CreateESP(instance, text, color)
+    local circle = Drawing.new("Circle")
+    circle.Visible = false
+    circle.Radius = 15
+    circle.Color = color
+    circle.Thickness = 2
+    circle.Filled = false
+
+    local label = Drawing.new("Text")
+    label.Visible = false
+    label.Text = text
+    label.Size = 18
+    label.Color = color
+    label.Center = true
+    label.Outline = true
+
+    table.insert(RadarObjects, {Circle = circle, Label = label, Target = instance})
+end
+
+-- Atualização contínua do Drawing API
+RunService.RenderStepped:Connect(function()
+    if not SystemActive then 
+        for _, obj in ipairs(RadarObjects) do
+            obj.Circle.Visible = false
+            obj.Label.Visible = false
         end
-        
-        -- PRIORIDADE 4: AUTO FARM LEVEL (PROGRESSÃO SEA 2)
-        if currentLevel < MAX_SEA1_LEVEL then
-            BotState.CurrentPriority = 4
-            -- Código de Auto-Quest Nativo do seu Farm (Pega missão baseada no nível atual)
-            -- Exemplo estrutural:
-            local genericEnemy = Workspace.Enemies:GetChildren()[1]
-            if genericEnemy and genericEnemy:FindFirstChild("HumanoidRootPart") then
-                BezierTravel(genericEnemy.HumanoidRootPart.Position, 250)
-                ExecuteCombatRotations(genericEnemy)
+        return 
+    end
+
+    local camera = workspace.CurrentCamera
+    for _, obj in ipairs(RadarObjects) do
+        if obj.Target and obj.Target.Parent and obj.Target:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = camera:WorldToViewportPoint(obj.Target.HumanoidRootPart.Position)
+            if onScreen then
+                obj.Circle.Position = Vector2.new(pos.X, pos.Y)
+                obj.Circle.Visible = true
+                
+                obj.Label.Position = Vector2.new(pos.X, pos.Y - 25)
+                obj.Label.Visible = true
+            else
+                obj.Circle.Visible = false
+                obj.Label.Visible = false
             end
         else
-            -- CASO CHEGUE AO LEVEL 700: AUTOMATIZA MISSÃO DO SEA 2
-            -- Viaja até a Prisão (Impel Down do Sea 1), fala com o Military Detective
-            local detectivePos = Vector3.new(4850, 5, -750) -- Coordenadas fictícias/ilustrativas da prisão
-            BezierTravel(detectivePos, 200)
-            -- Dispara remote para aceitar a missão da Ice Key / lutar contra o Ice Admiral
-            
-            -- Após derrotar o boss do Sea 2, viaja até a Cidade Central para falar com o Capitão Experiente
-            SmartServerHop() -- Muda após concluir tudo para validação de dados
-            break
+            obj.Circle.Visible = false
+            obj.Label.Visible = false
         end
-        
-        -- SE O SERVIDOR ESTIVER SECO (Sem metas válidas pendentes)
-        if BotState.CurrentPriority == 4 and math.random(1, 100) > 95 then
-            SmartServerHop()
+    end
+end)
+
+---------------------------------------------------------------------------
+-- MÓDULO 4: MEMORY-LEAK FREE SERVER HOP (PERSISTÊNCIA)
+---------------------------------------------------------------------------
+local function SmartServerHop()
+    table.insert(VisitedServers, game.JobId)
+    writefile(ServerHopFile, HttpService:JSONEncode(VisitedServers))
+    
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    
+    -- Função protegida para requisição HTTP dependendo da sintaxe do Executor
+    local requestFunc = syn and syn.request or http and http.request or http_request or fluxus and fluxus.request or request
+    if requestFunc then
+        local response = requestFunc({Url = url, Method = "GET"})
+        if response.StatusCode == 200 then
+            local data = HttpService:JSONDecode(response.Body)
+            for _, server in ipairs(data.data) do
+                if server.playing < server.maxPlayers - 1 and server.id ~= game.JobId then
+                    local alreadyVisited = false
+                    for _, v in ipairs(VisitedServers) do
+                        if v == server.id then alreadyVisited = true break end
+                    end
+                    if not alreadyVisited then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                        return
+                    end
+                end
+            end
         end
     end
 end
-task.spawn(BrainLoop)
 
--- 5. INTERFACE FLUTUANTE (BOTÃO DE CONTROLE DO DELTA EXECUTOR)
+---------------------------------------------------------------------------
+-- INTERFACE (UI) FLUTUANTE
+---------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
-local ToggleButton = Instance.new("TextButton")
-local MenuFrame = Instance.new("Frame")
-local OptHop = Instance.new("TextButton")
-local OptMain = Instance.new("TextButton")
+ScreenGui.Name = "RobynhoFut_Brain"
+-- Proteção básica contra detecção no CoreGui enviando para gethui() se disponível
+ScreenGui.Parent = (gethui and gethui()) or game.CoreGui
 
-ScreenGui.Parent = game:GetService("CoreGui") -- Apenas para a interface base de gatilho
-ToggleButton.Size = UDim2.new(0, 60, 0, 60)
-ToggleButton.Position = UDim2.new(0, 10, 0, 150)
-ToggleButton.Text = "BRAIN"
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Position = UDim2.new(0, 20, 0, 20)
 ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ToggleButton.TextColor3 = Color3.fromRGB(0, 255, 150)
+ToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100)
+ToggleButton.Text = "MENU"
+ToggleButton.Font = Enum.Font.Code
+ToggleButton.TextSize = 14
 ToggleButton.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", ToggleButton)
+UICorner.CornerRadius = UDim.new(1, 0) -- Botão redondo
+
+local MenuFrame = Instance.new("Frame")
 MenuFrame.Size = UDim2.new(0, 200, 0, 120)
-MenuFrame.Position = UDim2.new(0, 80, 0, 150)
+MenuFrame.Position = UDim2.new(0, 20, 0, 80)
 MenuFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MenuFrame.Visible = false
 MenuFrame.Parent = ScreenGui
-OptHop.Size = UDim2.new(1, 0, 0, 50)
-OptHop.Text = "Smart Server Hop"
-OptHop.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-OptHop.TextColor3 = Color3.fromRGB(255, 255, 255)
-OptHop.Parent = MenuFrame
-OptMain.Size = UDim2.new(1, 0, 0, 50)
-OptMain.Position = UDim2.new(0, 0, 0, 60)
-OptMain.Text = "Ativar Automação Completa"
-OptMain.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-OptMain.TextColor3 = Color3.fromRGB(255, 255, 255)
-OptMain.Parent = MenuFrame
+
+local StartBtn = Instance.new("TextButton")
+StartBtn.Size = UDim2.new(1, -20, 0, 40)
+StartBtn.Position = UDim2.new(0, 10, 0, 10)
+StartBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+StartBtn.Text = "INICIAR SISTEMA"
+StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartBtn.Parent = MenuFrame
+
+local HopBtn = Instance.new("TextButton")
+HopBtn.Size = UDim2.new(1, -20, 0, 40)
+HopBtn.Position = UDim2.new(0, 10, 0, 60)
+HopBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+HopBtn.Text = "SERVER HOP"
+HopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HopBtn.Parent = MenuFrame
+
+-- Lógica de UI
 ToggleButton.MouseButton1Click:Connect(function()
-MenuFrame.Visible = not MenuFrame.Visible
+    MenuFrame.Visible = not MenuFrame.Visible
 end)
-OptHop.MouseButton1Click:Connect(function()
-SmartServerHop()
+
+StartBtn.MouseButton1Click:Connect(function()
+    SystemActive = not SystemActive
+    if SystemActive then
+        StartBtn.Text = "DESLIGAR SISTEMA"
+        StartBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+        BrainLoop() -- Inicia o cérebro
+    else
+        StartBtn.Text = "INICIAR SISTEMA"
+        StartBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    end
 end)
-OptMain.MouseButton1Click:Connect(function()
-BotState.Active = not BotState.Active
-if BotState.Active then
-OptMain.Text = "Desativar Automação"
-OptMain.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-else
-OptMain.Text = "Ativar Automação Completa"
-OptMain.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+
+HopBtn.MouseButton1Click:Connect(function()
+    SmartServerHop()
+end)
+
+-- Popula o Radar com jogadores para testar a Drawing API
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer and player.Character then
+        CreateESP(player.Character, player.Name, Color3.fromRGB(255, 0, 0))
+    end
 end
-end)
