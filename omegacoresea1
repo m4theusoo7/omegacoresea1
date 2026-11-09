@@ -1,5 +1,5 @@
 --[[\
-    ROBYNHOFUT - Sea 1 Level 700 + Auto Fruit Collector & ESP
+    ROBYNHOFUT - Sea 1 100% Completion & Level 700 Smart Auto-Farm
     Executor: Delta (Roblox / Blox Fruits)
 ]]--
 
@@ -21,17 +21,17 @@ LocalPlayer.Idled:Connect(function()
     VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
 end)
 
--- Configurações Gerais
+-- Variáveis de Controle
 getgenv().Sea1Config = {
     AutoFarmLevel = true,
-    AutoCollectFruit = true,
+    AutoGetItems = true,
     AutoBosses = true,
     UseSkills = true,
-    WeaponMode = "Melee",
+    WeaponMode = "Melee", -- "Melee", "Sword", "Blox Fruit"
     CurrentStatus = "Iniciando..."
 }
 
--- Mapeamento de Missões do Sea 1
+-- Mapeamento de Missões do Sea 1 (Level min, Level max, Nome da Ilha, Nome da Quest/NPC, Nome do Mob)
 local Sea1Quests = {
     {Min = 1, Max = 9, Island = "Starter Island", NPC = "Marine Recruit", Mob = "Bandit"},
     {Min = 10, Max = 14, Island = "Jungle", NPC = "Adventurer", Mob = "Monkey"},
@@ -62,6 +62,7 @@ local function SafeTween(targetCFrame)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = LocalPlayer.Character.HumanoidRootPart
     
+    -- Desativar colisão para evitar travamentos
     for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
@@ -69,14 +70,15 @@ local function SafeTween(targetCFrame)
     end
     
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300
+    local speed = 300 -- Velocidade segura
     local info = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
     local tween = TweenService:Create(hrp, info, {CFrame = targetCFrame + Vector3.new(0, 35, 0)})
+    
     tween:Play()
-    tween.Completed:Wait()
+    return tween
 end
 
--- Disparador de Skills
+-- Disparador Inteligente de Skills (Z, X, C, V)
 local function UseCombatSkills()
     if not getgenv().Sea1Config.UseSkills then return end
     local vim = game:GetService("VirtualInputManager")
@@ -92,7 +94,7 @@ local function UseCombatSkills()
     end
 end
 
--- Equipar Arma/Estilo
+-- Função para checar e equipar arma/estilo
 local function EquipWeapon()
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local character = LocalPlayer.Character
@@ -109,47 +111,13 @@ local function EquipWeapon()
     end
 end
 
--- Checar e Coletar Frutas no Mapa (Workspace ou Backpack do chão)
-local function CheckAndCollectFruits()
-    if not getgenv().Sea1Config.AutoCollectFruit then return false end
-    
-    -- Procurar no Workspace por itens de fruta despachados
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
-            if obj:FindFirstChild("Handle") then
-                getgenv().Sea1Config.CurrentStatus = "Fruta encontrada: " .. obj.Name .. "!"
-                SafeTween(obj.Handle.CFrame)
-                task.wait(0.5)
-                return true
-            end
-        end
-    end
-    
-    -- Procurar dentro de subpastas comuns onde o Blox Fruits às vezes armazena drops
-    for _, child in ipairs(Workspace:GetChildren()) do
-        if child.Name == "Map" or child.Name == "Drops" or child.Name == "Collectibles" then
-            for _, obj in ipairs(child:GetDescendants()) do
-                if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
-                    if obj:FindFirstChild("Handle") then
-                        getgenv().Sea1Config.CurrentStatus = "Fruta encontrada em subpasta: " .. obj.Name .. "!"
-                        SafeTween(obj.Handle.CFrame)
-                        task.wait(0.5)
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    
-    return false
-end
-
--- Criar UI Flutuante
+-- Criar UI Flutuante Moderna para o Delta
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "RobynhofutSea1GUI"
 ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- Botão Flutuante Circular
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, 50, 0, 50)
 ToggleButton.Position = UDim2.new(0, 20, 0, 200)
@@ -165,6 +133,7 @@ local UICornerBtn = Instance.new("UICorner")
 UICornerBtn.CornerRadius = UDim.new(1, 0)
 UICornerBtn.Parent = ToggleButton
 
+-- Janela Principal
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 320, 0, 220)
 MainFrame.Position = UDim2.new(0, 80, 0, 200)
@@ -181,7 +150,7 @@ UICornerFrame.Parent = MainFrame
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, 0, 0, 40)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "ROBYNHOFUT | Farm + Frutas"
+TitleLabel.Text = "ROBYNHOFUT | Sea 1 100%"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 120, 0)
 TitleLabel.TextSize = 15
 TitleLabel.Font = Enum.Font.GothamBold
@@ -197,25 +166,23 @@ StatusLabel.Font = Enum.Font.Code
 StatusLabel.TextWrapped = true
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.TextYAlignment = Enum.TextYAlignment.Top
-StatusLabel.Text = "Status: Escaneando..."
+StatusLabel.Text = "Status: Aguardando inicialização..."
 StatusLabel.Parent = MainFrame
 
 local UICornerStatus = Instance.new("UICorner")
 UICornerStatus.CornerRadius = UDim.new(0, 8)
 UICornerStatus.Parent = StatusLabel
 
+-- Toggle Ação da UI
 ToggleButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
--- Loop Principal Inteligente (Prioriza Fruta se aparecer, senão faz Level Farm)
+-- Loop Principal Inteligente de Farm
 task.spawn(function()
     while true do
         pcall(function()
-            -- 1. Prioridade Absoluta: Checar se spawnou alguma fruta no mapa
-            local foundFruit = CheckAndCollectFruits()
-            
-            if not foundFruit and getgenv().Sea1Config.AutoFarmLevel then
+            if getgenv().Sea1Config.AutoFarmLevel then
                 local data = LocalPlayer.Data
                 local level = data.Level.Value
                 
@@ -225,6 +192,7 @@ task.spawn(function()
                     return
                 end
                 
+                -- Encontrar a missão adequada para o level atual
                 local currentQuestData = nil
                 for _, q in ipairs(Sea1Quests) do
                     if level >= q.Min and level <= q.Max then
@@ -234,11 +202,12 @@ task.spawn(function()
                 end
                 
                 if currentQuestData then
-                    getgenv().Sea1Config.CurrentStatus = string.Format("Level: %d\nMob: %s\nIlha: %s", level, currentQuestData.Mob, currentQuestData.Island)
-                    StatusLabel.Text = "Status:\n" + getgenv().Sea1Config.CurrentStatus
+                    getgenv().Sea1Config.CurrentStatus = string.Format("Level: %d\nAlvo: %s\nIlha: %s", level, currentQuestData.Mob, currentQuestData.Island)
+                    StatusLabel.Text = "Status:\n" .. getgenv().Sea1Config.CurrentStatus
                     
                     EquipWeapon()
                     
+                    -- Procurar Mob no Workspace
                     local enemiesFolder = Workspace.Enemies
                     local targetEnemy = nil
                     
@@ -256,12 +225,17 @@ task.spawn(function()
                         local enemyHRP = targetEnemy.HumanoidRootPart
                         SafeTween(enemyHRP.CFrame)
                         
+                        -- Ficar voando levemente acima do mob e atacar
                         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                             LocalPlayer.Character.HumanoidRootPart.CFrame = enemyHRP.CFrame + Vector3.new(0, 10, 0)
                         end
                         
+                        -- Atacar com clique e soltar skills
                         VirtualUser:Button1Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
                         UseCombatSkills()
+                    else
+                        -- Se não achar o mob na tela, ir para a ilha padrão da quest
+                        getgenv().Sea1Config.CurrentStatus = "Procurando mobs na ilha..."
                     end
                 end
             end
