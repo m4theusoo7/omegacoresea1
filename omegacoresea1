@@ -11,6 +11,7 @@ local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 
@@ -21,8 +22,6 @@ getgenv().OmegaCore_ServerHop = false
 -- ==============================================================================
 -- [ BANCO DE DADOS: BOSSES, DROPS E QUESTS DO SEA 1 ]
 -- ==============================================================================
-
--- Tabela de Bosses e seus Drops. O script só os caça se você NÃO tiver o item.
 local BossesSea1 = {
     {Nome = "Bobby", Drop = "Chop"},
     {Nome = "Yeti", Drop = "Yeti Sword"},
@@ -36,15 +35,18 @@ local BossesSea1 = {
     {Nome = "Fishman Lord", Drop = "Trident"}
 }
 
--- Tabela Estrutural de Níveis (Exemplo prático, adicione as coordenadas do seu servidor)
+-- Tabela Estrutural de Níveis (Lvl, Nome do Mob, Nome da Quest, Nível da Quest (1 ou 2), Local do NPC e Local do Mob)
 local ZonasDeFarm = {
-    {LvlMin = 1, LvlMax = 9, Mob = "Bandit", Quest = "BanditQuest1", NpcPos = CFrame.new(1059, 16, 1549), MobPos = CFrame.new(1148, 16, 1610)},
-    {LvlMin = 10, LvlMax = 14, Mob = "Monkey", Quest = "JungleQuest", NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1449, 22, 105)},
-    -- O motor de IA lerá esta tabela para decidir para onde ir se não houver boss ou fruta.
+    {LvlMin = 1, LvlMax = 9, Mob = "Bandit", Quest = "BanditQuest1", QuestLevel = 1, NpcPos = CFrame.new(1059, 16, 1549), MobPos = CFrame.new(1148, 16, 1610)},
+    {LvlMin = 10, LvlMax = 14, Mob = "Monkey", Quest = "JungleQuest", QuestLevel = 1, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1449, 22, 105)},
+    {LvlMin = 15, LvlMax = 29, Mob = "Gorilla", Quest = "JungleQuest", QuestLevel = 2, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1237, 6, -486)},
+    {LvlMin = 30, LvlMax = 39, Mob = "Pirate", Quest = "BuggyQuest1", QuestLevel = 1, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1217, 4, 3933)},
+    {LvlMin = 40, LvlMax = 59, Mob = "Brute", Quest = "BuggyQuest1", QuestLevel = 2, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1388, 14, 4280)}
+    -- Continue adicionando as ilhas seguintes seguindo esse mesmo molde!
 }
 
 -- ==============================================================================
--- [ MÓDULO 1: RADAR CUSTOMIZADO (DRAWING API - INVISÍVEL) ]
+-- [ MÓDULO 1: RADAR CUSTOMIZADO (DRAWING API) ]
 -- ==============================================================================
 local RadarStatus = Drawing.new("Text")
 RadarStatus.Visible = true
@@ -64,12 +66,11 @@ local function AtualizarRadar(acao, alvo, detalhe)
     msg = msg .. "Ação: " .. acao .. "\n"
     if alvo then msg = msg .. "Alvo: " .. alvo .. "\n" end
     if detalhe then msg = msg .. "Info: " .. detalhe end
-    
     RadarStatus.Text = msg
 end
 
 -- ==============================================================================
--- [ MÓDULO 2: SISTEMA MEMORY-LEAK FREE SERVER HOP (PERSISTÊNCIA) ]
+-- [ MÓDULO 2: SERVER HOP PERSISTENTE ]
 -- ==============================================================================
 local function ExecutarServerHop()
     if not getgenv().OmegaCore_ServerHop then return end
@@ -110,7 +111,7 @@ local function ExecutarServerHop()
 end
 
 -- ==============================================================================
--- [ MÓDULO 3: MOTOR DE VOO INDETECTÁVEL (CURVAS DE BÉZIER) ]
+-- [ MÓDULO 3: MOTOR DE VOO (BÉZIER) ]
 -- ==============================================================================
 local function CalcularBezier(t, p0, p1, p2)
     return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
@@ -128,6 +129,13 @@ local function VooBezierInteligente(targetCFrame)
             for _, p in pairs(char:GetDescendants()) do
                 if p:IsA("BasePart") then p.CanCollide = false end
             end
+            local bv = hrp:FindFirstChild("AntiBorracha")
+            if not bv then
+                bv = Instance.new("BodyVelocity", hrp)
+                bv.Name = "AntiBorracha"
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bv.Velocity = Vector3.new(0, 0, 0)
+            end
             hrp.Velocity = Vector3.new(0, 0, 0)
         end
     end)
@@ -139,10 +147,11 @@ local function VooBezierInteligente(targetCFrame)
     if distance < 30 then
         hrp.CFrame = targetCFrame
         if noclipCon then noclipCon:Disconnect() end
+        local b = hrp:FindFirstChild("AntiBorracha")
+        if b then b:Destroy() end
         return true
     end
 
-    -- Cria o arco matemático de desvio
     local offset = Vector3.new(math.random(-100, 100), math.random(100, 200), math.random(-100, 100))
     local controlPoint = startPos:Lerp(endPos, 0.5) + offset
     local tempoTotal = distance / 320
@@ -152,34 +161,38 @@ local function VooBezierInteligente(targetCFrame)
         if not getgenv().OmegaCore_AutoFarm then break end
         tempoPassado = tempoPassado + RunService.Heartbeat:Wait()
         local t = math.clamp(tempoPassado / tempoTotal, 0, 1)
-        
-        -- Easing suave
         local tOtimizado = t < 0.5 and 2 * t * t or 1 - math.pow(-2 * t + 2, 2) / 2
         local novaPos = CalcularBezier(tOtimizado, startPos, controlPoint, endPos)
         hrp.CFrame = CFrame.new(novaPos, endPos)
     end
 
     if noclipCon then noclipCon:Disconnect() end
+    local b = hrp:FindFirstChild("AntiBorracha")
+    if b then b:Destroy() end
     return true
 end
 
 -- ==============================================================================
--- [ MÓDULO 4: MATRIZ DE PRIORIDADE DINÂMICA (IA DE DECISÃO) ]
+-- [ MÓDULO 4: IA DE MISSÕES E MATRIZ DE DECISÃO ]
 -- ==============================================================================
-
 local function PossuiDrop(nomeDrop)
-    -- Verifica se o Drop está na mochila ou equipado
     local backpack = player:WaitForChild("Backpack")
     local char = player.Character
     if backpack:FindFirstChild(nomeDrop) then return true end
     if char and char:FindFirstChild(nomeDrop) then return true end
-    
-    -- Se for acessório ou arma guardada, o jogo pode ter o save no ReplicatedStorage (depende da versão)
+    return false
+end
+
+local function TemMissaoAtiva()
+    -- Verifica se a GUI da Missão está aparecendo na tela
+    local mainGui = player:WaitForChild("PlayerGui"):FindFirstChild("Main")
+    if mainGui and mainGui:FindFirstChild("Quest") then
+        return mainGui.Quest.Visible
+    end
     return false
 end
 
 local function UsarHabilidades()
-    -- Clica o Mouse e usa todas as skills
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
     for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
@@ -189,7 +202,7 @@ local function UsarHabilidades()
 end
 
 local function AnalisarMatriz()
-    -- PRIORIDADE 1: Frutas Míticas/Lendárias no chão
+    -- 1. Frutas Lendárias/Míticas no chão
     for _, obj in pairs(Workspace:GetChildren()) do
         if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
             if string.find(obj.Name, "Dragon") or string.find(obj.Name, "Dough") or string.find(obj.Name, "Leopard") or string.find(obj.Name, "Kitsune") then
@@ -198,11 +211,10 @@ local function AnalisarMatriz()
         end
     end
 
-    -- PRIORIDADE 3: Bosses com Drops Faltantes
+    -- 2. Bosses que você não tem o drop ainda
     if Workspace:FindFirstChild("Enemies") then
         for _, enemy in pairs(Workspace.Enemies:GetChildren()) do
             for _, boss in ipairs(BossesSea1) do
-                -- Se for o boss da lista e eu AINDA NÃO TENHO O DROP DELE
                 if string.find(enemy.Name, boss.Nome) and not PossuiDrop(boss.Drop) then
                     if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
                         return {Tipo = "Boss", Part = enemy:FindFirstChild("HumanoidRootPart"), Alvo = enemy, Drop = boss.Drop}
@@ -212,9 +224,11 @@ local function AnalisarMatriz()
         end
     end
 
-    -- PRIORIDADE 4: Auto Level (Se não houver fruta mítica nem boss pendente)
+    -- 3. Farme Sincronizado por Level e Missões
     local meuLevel = player.Data.Level.Value
     local zonaAtual = nil
+    
+    -- Busca a zona que corresponde ao seu nível
     for _, zona in ipairs(ZonasDeFarm) do
         if meuLevel >= zona.LvlMin and meuLevel <= zona.LvlMax then
             zonaAtual = zona
@@ -223,8 +237,35 @@ local function AnalisarMatriz()
     end
     
     if zonaAtual then
-        -- Aqui entraria a lógica de falar com o NPC da zonaAtual e depois matar o Mob
-        return {Tipo = "Farm", Part = CFrame.new(zonaAtual.MobPos.Position), Alvo = zonaAtual.Mob}
+        if not TemMissaoAtiva() then
+            -- Precisa ir no NPC pegar a quest
+            return {Tipo = "PegarMissao", Part = zonaAtual.NpcPos, Alvo = "NPC da Missão", Zona = zonaAtual}
+        else
+            -- A missão já tá na tela, vai caçar o Mob
+            local closestMob = nil
+            local shortest = math.huge
+            local char = player.Character
+            
+            if char and char:FindFirstChild("HumanoidRootPart") and Workspace:FindFirstChild("Enemies") then
+                local hrp = char.HumanoidRootPart
+                for _, mob in pairs(Workspace.Enemies:GetChildren()) do
+                    if string.find(mob.Name, zonaAtual.Mob) and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                        local dist = (hrp.Position - mob.HumanoidRootPart.Position).Magnitude
+                        if dist < shortest then
+                            shortest = dist
+                            closestMob = mob
+                        end
+                    end
+                end
+            end
+            
+            if closestMob then
+                return {Tipo = "FarmLevel", Part = closestMob.HumanoidRootPart, Alvo = closestMob, Zona = zonaAtual}
+            else
+                -- Os Mobs morreram e estão dando spawn, aguarda no local deles
+                return {Tipo = "AguardarMob", Part = zonaAtual.MobPos, Alvo = "Aguardando " .. zonaAtual.Mob, Zona = zonaAtual}
+            end
+        end
     end
 
     return nil
@@ -244,23 +285,43 @@ local function IA_CerebroLoop()
             AtualizarRadar("Caçando", decisao.Alvo.Name or decisao.Alvo, "Modo: " .. decisao.Tipo)
             local dist = (hrp.Position - (typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position)).Magnitude
 
-            if dist > 30 then
-                -- Voo furtivo até o alvo
-                local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
-                if decisao.Tipo == "Boss" or decisao.Tipo == "Farm" then
-                    cframeDestino = cframeDestino * CFrame.new(0, 10, 0) -- Fica acima do alvo
+            if decisao.Tipo == "PegarMissao" then
+                if dist > 15 then
+                    VooBezierInteligente(decisao.Part) -- Voa até o NPC
+                else
+                    -- Chama o servidor para ativar a missão na sua tela
+                    local args = {
+                        [1] = "StartQuest",
+                        [2] = decisao.Zona.Quest,
+                        [3] = decisao.Zona.QuestLevel
+                    }
+                    ReplicatedStorage.Remotes.CommF_:InvokeServer(unpack(args))
+                    task.wait(1)
                 end
-                VooBezierInteligente(cframeDestino)
-            else
-                -- Combate
-                local pos = typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position
-                hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(pos.X, hrp.Position.Y, pos.Z))
-                if decisao.Tipo ~= "Fruta" then
+                
+            elseif decisao.Tipo == "FarmLevel" or decisao.Tipo == "Boss" then
+                if dist > 15 then
+                    -- Voa até o inimigo, parando 10 studs acima
+                    local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
+                    VooBezierInteligente(cframeDestino * CFrame.new(0, 10, 0))
+                else
+                    local pos = typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position
+                    hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(pos.X, hrp.Position.Y, pos.Z))
                     UsarHabilidades()
+                end
+                
+            elseif decisao.Tipo == "AguardarMob" then
+                if dist > 15 then
+                    VooBezierInteligente(decisao.Part * CFrame.new(0, 20, 0)) -- Fica pairando acima do spawn
+                end
+            elseif decisao.Tipo == "Fruta" then
+                if dist > 10 then
+                    VooBezierInteligente(decisao.Part.CFrame)
+                else
+                    hrp.CFrame = decisao.Part.CFrame
                 end
             end
         else
-            -- Nenhuma missão, nenhum boss pendente vivo no mapa. Servidor seco.
             AtualizarRadar("Limpeza Completa", "Servidor Seco", "Avaliando Server Hop...")
             if getgenv().OmegaCore_ServerHop then
                 ExecutarServerHop()
@@ -279,7 +340,6 @@ if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
 local sg = Instance.new("ScreenGui", CoreGui)
 sg.Name = uiName
 
--- Botão Flutuante Principal
 local btnPrincipal = Instance.new("TextButton", sg)
 btnPrincipal.Size = UDim2.new(0, 60, 0, 60)
 btnPrincipal.Position = UDim2.new(0.5, -30, 0.05, 0)
@@ -294,7 +354,6 @@ local uis1 = Instance.new("UIStroke", btnPrincipal)
 uis1.Thickness = 2
 uis1.Color = Color3.fromRGB(0, 255, 255)
 
--- Janela de Opções (Escondida por padrão)
 local painelMenu = Instance.new("Frame", sg)
 painelMenu.Size = UDim2.new(0, 220, 0, 140)
 painelMenu.Position = UDim2.new(0.5, -110, 0.15, 0)
@@ -327,12 +386,11 @@ local btnServerHop = Instance.new("TextButton", painelMenu)
 btnServerHop.Size = UDim2.new(0.9, 0, 0, 35)
 btnServerHop.Position = UDim2.new(0.05, 0, 0.65, 0)
 btnServerHop.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-btnServerHop.Text = "Server Hop Persistente: OFF"
+btnServerHop.Text = "Server Hop: OFF"
 btnServerHop.TextColor3 = Color3.fromRGB(255, 255, 255)
 btnServerHop.Font = Enum.Font.Code
 Instance.new("UICorner", btnServerHop).CornerRadius = UDim.new(0, 5)
 
--- Lógica dos Botões UI
 btnPrincipal.MouseButton1Click:Connect(function()
     painelMenu.Visible = not painelMenu.Visible
 end)
@@ -353,14 +411,13 @@ btnServerHop.MouseButton1Click:Connect(function()
     getgenv().OmegaCore_ServerHop = not getgenv().OmegaCore_ServerHop
     if getgenv().OmegaCore_ServerHop then
         btnServerHop.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-        btnServerHop.Text = "Server Hop Persistente: ON"
+        btnServerHop.Text = "Server Hop: ON"
     else
         btnServerHop.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        btnServerHop.Text = "Server Hop Persistente: OFF"
+        btnServerHop.Text = "Server Hop: OFF"
     end
 end)
 
--- Sistema Drag
 local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
@@ -380,5 +437,4 @@ UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then update(input) end
 end)
 
--- Inicializa Loop de IA
 task.spawn(IA_CerebroLoop)
