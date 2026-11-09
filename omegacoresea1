@@ -101,12 +101,15 @@ local function PossuiDrop(nomeDrop)
 end
 
 local function TemMissaoAtiva()
-    -- Checagem segura para evitar erros se a interface ainda estiver carregando
+    -- Checagem extremamente segura da UI para evitar loops falsos
     local pGui = player:FindFirstChild("PlayerGui")
     if pGui and pGui:FindFirstChild("Main") then
         local quest = pGui.Main:FindFirstChild("Quest")
         if quest and quest.Visible then
-            return true
+            local container = quest:FindFirstChild("Container")
+            if container and container:FindFirstChild("QuestTitle") and container.QuestTitle.Text ~= "" then
+                return true
+            end
         end
     end
     return false
@@ -182,7 +185,6 @@ local function ExecutarServerHop()
     AtualizarRadar("Analisando", "Sem Alvos", "Iniciando Salto (Hop)...")
     
     local TPS = game:GetService("TeleportService")
-    -- CORREÇÃO AQUI: RoProxy utilizado para burlar o bloqueio de API do Roblox no Executor
     local ApiUrl = "https://games.roproxy.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
     local visitedFile = "OmegaCore_VisitedServers.json"
     local visited = {}
@@ -291,7 +293,6 @@ local function IA_CerebroLoop()
         if decisao then
             AtualizarRadar("Caçando", decisao.Alvo.Name or decisao.Alvo, "Modo: " .. decisao.Tipo)
             
-            -- Segurança contra itens que sumiram do mapa durante a análise
             if not decisao.Part or not decisao.Part.Parent then continue end
             local alvoPos = typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position
             local dist = (hrp.Position - alvoPos).Magnitude
@@ -300,12 +301,17 @@ local function IA_CerebroLoop()
                 if dist > 8 then
                     VooBezierInteligente(decisao.Part)
                 else
+                    -- SOLUÇÃO DO BUG: Sincronização forçada com o servidor
                     hrp.CFrame = decisao.Part
-                    task.wait(0.2)
+                    
+                    local hum = char:FindFirstChild("Humanoid")
+                    if hum then hum.Jump = true end -- Pula para o anti-cheat confirmar posição real
+                    
+                    task.wait(0.6) -- Delay seguro para a rede
                     pcall(function()
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", decisao.Zona.Quest, decisao.Zona.QuestLevel)
                     end)
-                    task.wait(1)
+                    task.wait(1.5) -- Tempo para a missão aparecer na tela
                 end
                 
             elseif decisao.Tipo == "FarmLevel" or decisao.Tipo == "Boss" then
@@ -313,7 +319,7 @@ local function IA_CerebroLoop()
                     local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
                     VooBezierInteligente(cframeDestino * CFrame.new(0, 10, 0))
                 else
-                    -- CORREÇÃO AQUI: Agora ele teletransporta exatamente pra cabeça do monstro para garantir o acerto
+                    -- Trava precisamente na cabeça do alvo para não errar ataques corpo-a-corpo
                     hrp.CFrame = CFrame.lookAt(alvoPos + Vector3.new(0, 7, 0), alvoPos)
                     UsarHabilidades()
                 end
