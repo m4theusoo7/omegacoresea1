@@ -1,5 +1,5 @@
 -- ==============================================================================
--- OMEGA CORE: SEA 1 DOMINATION (AI, Nível, Aura & Bézier Pathfinding)
+-- OMEGA CORE: SEA 1 DOMINATION (Versão Definitiva - Correção de UI e Hop)
 -- Desenvolvido para Delta Executor
 -- ==============================================================================
 
@@ -34,7 +34,7 @@ local BossesSea1 = {
     {Nome = "Fishman Lord", Drop = "Trident", LvlReq = 425}
 }
 
--- Tabela Estrutural de Níveis (Zonas de Farm)
+-- Tabela Estrutural de Níveis
 local ZonasDeFarm = {
     {LvlMin = 1, LvlMax = 9, Mob = "Bandit", Quest = "BanditQuest1", QuestLevel = 1, NpcPos = CFrame.new(1059, 16, 1549), MobPos = CFrame.new(1148, 16, 1610)},
     {LvlMin = 10, LvlMax = 14, Mob = "Monkey", Quest = "JungleQuest", QuestLevel = 1, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1449, 22, 105)},
@@ -76,9 +76,7 @@ end
 local function AtivarAura()
     local char = player.Character
     if char and not char:FindFirstChild("HasBuso") then
-        pcall(function()
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
-        end)
+        pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso") end)
     end
 end
 
@@ -100,16 +98,14 @@ local function PossuiDrop(nomeDrop)
     return false
 end
 
+-- [ CIRURGIA 1: LEITURA DE MISSÃO 100% BLINDADA ]
 local function TemMissaoAtiva()
-    -- Checagem extremamente segura da UI para evitar loops falsos
     local pGui = player:FindFirstChild("PlayerGui")
     if pGui and pGui:FindFirstChild("Main") then
         local quest = pGui.Main:FindFirstChild("Quest")
-        if quest and quest.Visible then
-            local container = quest:FindFirstChild("Container")
-            if container and container:FindFirstChild("QuestTitle") and container.QuestTitle.Text ~= "" then
-                return true
-            end
+        -- Se a UI principal da missão estiver visível, não pergunta nada, só assume que tem missão.
+        if quest and quest.Visible == true then
+            return true
         end
     end
     return false
@@ -180,11 +176,14 @@ end
 -- ==============================================================================
 -- [ MÓDULO 4: IA DE MISSÕES, DECISÃO E SERVER HOP ]
 -- ==============================================================================
+
+-- [ CIRURGIA 2: SERVER HOP OTIMIZADO PARA ROBLOX API ]
 local function ExecutarServerHop()
     if not getgenv().OmegaCore_ServerHop then return end
     AtualizarRadar("Analisando", "Sem Alvos", "Iniciando Salto (Hop)...")
     
     local TPS = game:GetService("TeleportService")
+    -- Usando RoProxy com fallback de erro
     local ApiUrl = "https://games.roproxy.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
     local visitedFile = "OmegaCore_VisitedServers.json"
     local visited = {}
@@ -196,10 +195,11 @@ local function ExecutarServerHop()
     
     if #visited > 50 then visited = {} end
     table.insert(visited, game.JobId)
-    if writefile then writefile(visitedFile, HttpService:JSONEncode(visited)) end
+    if writefile then pcall(function() writefile(visitedFile, HttpService:JSONEncode(visited)) end) end
 
     pcall(function()
-        local servers = HttpService:JSONDecode(game:HttpGet(ApiUrl))
+        local response = game:HttpGet(ApiUrl)
+        local servers = HttpService:JSONDecode(response)
         if servers and servers.data then
             for _, srv in pairs(servers.data) do
                 if type(srv) == "table" and srv.playing < srv.maxPlayers - 1 and srv.id ~= game.JobId then
@@ -301,17 +301,15 @@ local function IA_CerebroLoop()
                 if dist > 8 then
                     VooBezierInteligente(decisao.Part)
                 else
-                    -- SOLUÇÃO DO BUG: Sincronização forçada com o servidor
                     hrp.CFrame = decisao.Part
-                    
                     local hum = char:FindFirstChild("Humanoid")
-                    if hum then hum.Jump = true end -- Pula para o anti-cheat confirmar posição real
+                    if hum then hum.Jump = true end 
                     
-                    task.wait(0.6) -- Delay seguro para a rede
+                    task.wait(0.5) 
                     pcall(function()
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", decisao.Zona.Quest, decisao.Zona.QuestLevel)
                     end)
-                    task.wait(1.5) -- Tempo para a missão aparecer na tela
+                    task.wait(2) -- Tempo extra para o servidor confirmar e a interface aparecer
                 end
                 
             elseif decisao.Tipo == "FarmLevel" or decisao.Tipo == "Boss" then
@@ -319,7 +317,6 @@ local function IA_CerebroLoop()
                     local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
                     VooBezierInteligente(cframeDestino * CFrame.new(0, 10, 0))
                 else
-                    -- Trava precisamente na cabeça do alvo para não errar ataques corpo-a-corpo
                     hrp.CFrame = CFrame.lookAt(alvoPos + Vector3.new(0, 7, 0), alvoPos)
                     UsarHabilidades()
                 end
