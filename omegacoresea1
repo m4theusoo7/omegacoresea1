@@ -1,646 +1,425 @@
--- ==============================================================================
--- 🧠 BLOX FRUITS SEA 1 - A.I. SYSTEM (PARTE 1 / 3)
--- Criado para Delta Executor | GitHub Ready
--- ==============================================================================
-
+-- =====================================================================
+-- ⚙️ OMEGA CORE SEA 1 - PARTE 1 (SERVIÇOS, UI E MOTOR BÉZIER)
+-- =====================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualUser = game:GetService("VirtualUser")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
-local player = Players.LocalPlayer
+-- 🛡️ RADAR ESP INVISÍVEL (DRAWING API)
+local ESP_Boxes = {}
+_G.RadarEnabled = false
 
-getgenv().Config = {
-    AutoFarm = false,
-    AutoHopBoss = true,
-    AutoBuyItens = true,
-    AutoSea2 = true,
-    DistanciaAtaque = 7 -- Distância acima do mob para bater sem apanhar
-}
-
--- ==============================================================================
--- 🗄️ DATABASE 1: PROGRESSÃO DE LEVEL (1 a 700)
--- O bot vai ler o nível do jogador e procurar a missão correta aqui.
--- ==============================================================================
-local QuestDB = {
-    {Min = 1, Max = 9, Mob = "Bandit", Quest = "BanditQuest1", QLevel = 1, Npc = "Bandit Quest Giver"},
-    {Min = 10, Max = 14, Mob = "Monkey", Quest = "JungleQuest", QLevel = 1, Npc = "Adventurer"},
-    {Min = 15, Max = 29, Mob = "Gorilla", Quest = "JungleQuest", QLevel = 2, Npc = "Adventurer"},
-    {Min = 30, Max = 39, Mob = "Pirate", Quest = "BuggyQuest1", QLevel = 1, Npc = "Pirate Adventurer"},
-    {Min = 40, Max = 59, Mob = "Brute", Quest = "BuggyQuest1", QLevel = 2, Npc = "Pirate Adventurer"},
-    {Min = 60, Max = 74, Mob = "Desert Bandit", Quest = "DesertQuest", QLevel = 1, Npc = "Desert Adventurer"},
-    {Min = 75, Max = 89, Mob = "Desert Officer", Quest = "DesertQuest", QLevel = 2, Npc = "Desert Adventurer"},
-    {Min = 90, Max = 99, Mob = "Snow Bandit", Quest = "SnowQuest", QLevel = 1, Npc = "Snow Adventurer"},
-    {Min = 100, Max = 119, Mob = "Snowman", Quest = "SnowQuest", QLevel = 2, Npc = "Snow Adventurer"},
-    {Min = 120, Max = 149, Mob = "Chief Petty Officer", Quest = "MarineQuest2", QLevel = 1, Npc = "Marine"},
-    {Min = 150, Max = 174, Mob = "Sky Bandit", Quest = "SkyQuest", QLevel = 1, Npc = "Sky Adventurer"},
-    {Min = 175, Max = 189, Mob = "Dark Master", Quest = "SkyQuest", QLevel = 2, Npc = "Sky Adventurer"},
-    {Min = 190, Max = 210, Mob = "Prisoner", Quest = "PrisonerQuest", QLevel = 1, Npc = "Guard"},
-    {Min = 210, Max = 249, Mob = "Dangerous Prisoner", Quest = "PrisonerQuest", QLevel = 2, Npc = "Guard"},
-    {Min = 250, Max = 274, Mob = "Toga Warrior", Quest = "ColosseumQuest", QLevel = 1, Npc = "Gladiator"},
-    {Min = 275, Max = 299, Mob = "Gladiator", Quest = "ColosseumQuest", QLevel = 2, Npc = "Gladiator"},
-    {Min = 300, Max = 329, Mob = "Magma Ninja", Quest = "MagmaQuest", QLevel = 1, Npc = "Military Detective"},
-    {Min = 330, Max = 374, Mob = "Fishman Warrior", Quest = "FishmanQuest", QLevel = 1, Npc = "Fishman Researcher"},
-    {Min = 375, Max = 399, Mob = "Fishman Commando", Quest = "FishmanQuest", QLevel = 2, Npc = "Fishman Researcher"},
-    {Min = 400, Max = 449, Mob = "God's Guard", Quest = "SkyExp1Quest", QLevel = 1, Npc = "Sky Watcher"},
-    {Min = 450, Max = 474, Mob = "Shanda", Quest = "SkyExp1Quest", QLevel = 2, Npc = "Sky Watcher"},
-    {Min = 475, Max = 524, Mob = "Royal Squad", Quest = "SkyExp2Quest", QLevel = 1, Npc = "Wysper"},
-    {Min = 525, Max = 624, Mob = "Royal Soldier", Quest = "SkyExp2Quest", QLevel = 2, Npc = "Wysper"},
-    {Min = 625, Max = 699, Mob = "Galley Pirate", Quest = "FountainQuest", QLevel = 1, Npc = "Galley Captain"},
-    {Min = 700, Max = 20000, Mob = "Galley Captain", Quest = "FountainQuest", QLevel = 2, Npc = "Galley Captain"}
-}
-
--- ==============================================================================
--- 🗄️ DATABASE 2: BOSSES E SEUS DROPS EXCLUSIVOS
--- ==============================================================================
-local BossDB = {
-    {Nome = "Yeti", Level = 110, Drop = "Yeti Sword"},
-    {Nome = "Vice Admiral", Level = 130, Drop = "Vice Admiral's Coat"},
-    {Nome = "Swan", Level = 240, Drop = "Pink Coat"},
-    {Nome = "Chief Warden", Level = 200, Drop = "Warden Sword"},
-    {Nome = "Warden", Level = 220, Drop = "Warden Sword"},
-    {Nome = "Magma Admiral", Level = 350, Drop = "Magma Blade"},
-    {Nome = "Fishman Lord", Level = 425, Drop = "Trident"},
-    {Nome = "Wysper", Level = 500, Drop = "Bazooka"},
-    {Nome = "Enel", Level = 575, Drop = "Pole (1st Form)"},
-    {Nome = "Cyborg", Level = 675, Drop = "Cool Shades"}
-}
-
--- ==============================================================================
--- 🗄️ DATABASE 3: HABILIDADES, ESTILOS DE LUTA E ARMAS
--- ==============================================================================
-local ShopDB = {
-    -- Habilidades Básicas (Ability Teacher)
-    {Nome = "Geppo", Custo = 10000, Tipo = "Habilidade"},
-    {Nome = "Buso", Custo = 25000, Tipo = "Habilidade"}, -- Aura/Haki
-    {Nome = "Soru", Custo = 100000, Tipo = "Habilidade"}, -- Flash Step
+local function CreateESP(target)
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = Color3.fromRGB(255, 50, 50)
+    box.Thickness = 1.5
+    box.Filled = false
+    box.Transparency = 1
     
-    -- Estilos de Luta (Requer dinheiro)
-    {Nome = "Black Leg", Custo = 150000, Tipo = "Melee"},
-    {Nome = "Electro", Custo = 500000, Tipo = "Melee"},
-    {Nome = "Water Kung Fu", Custo = 750000, Tipo = "Melee"},
-    
-    -- Status Extras
-    {Nome = "Instinct", Custo = 750000, Tipo = "Haki da Observacao"}
-}
+    local nameText = Drawing.new("Text")
+    nameText.Visible = false
+    nameText.Color = Color3.fromRGB(255, 255, 255)
+    nameText.Size = 14
+    nameText.Center = true
+    nameText.Outline = true
 
--- ==============================================================================
--- 🚀 FÍSICA: NOCLIP & ANTI-STUCK (LinearVelocity Override)
--- ==============================================================================
-local function EnableNoclip()
-    task.spawn(function()
-        while task.wait() do
-            if not getgenv().Config.AutoFarm then break end
-            local char = player.Character
-            if char then
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end
-    end)
+    ESP_Boxes[target] = {Box = box, Text = nameText}
 end
 
--- ==============================================================================
--- 🛸 VOO BÉZIER (BYPASS ANTI-CHEAT)
--- ==============================================================================
-local function Bezier(t, p0, p1, p2)
+RunService.RenderStepped:Connect(function()
+    if not _G.RadarEnabled then
+        for _, esp in pairs(ESP_Boxes) do esp.Box.Visible = false; esp.Text.Visible = false end
+        return
+    end
+    for target, esp in pairs(ESP_Boxes) do
+        if target and target:FindFirstChild("HumanoidRootPart") and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+            local pos, onScreen = Camera:WorldToViewportPoint(target.HumanoidRootPart.Position)
+            if onScreen then
+                esp.Box.Size = Vector2.new(2000 / pos.Z, 2500 / pos.Z)
+                esp.Box.Position = Vector2.new(pos.X - esp.Box.Size.X / 2, pos.Y - esp.Box.Size.Y / 2)
+                esp.Box.Visible = true
+                esp.Text.Text = target.Name .. " [" .. math.floor(target.Humanoid.Health) .. "]"
+                esp.Text.Position = Vector2.new(pos.X, pos.Y - esp.Box.Size.Y / 2 - 15)
+                esp.Text.Visible = true
+            else
+                esp.Box.Visible = false; esp.Text.Visible = false
+            end
+        else
+            esp.Box.Visible = false; esp.Text.Visible = false
+            if esp.Box then esp.Box:Remove() end
+            if esp.Text then esp.Text:Remove() end
+            ESP_Boxes[target] = nil
+        end
+    end
+end)
+
+workspace.Enemies.ChildAdded:Connect(function(child) task.wait(0.5); CreateESP(child) end)
+
+-- 🚀 MOTOR DE VOO BÉZIER (BYPASS ANTI-CHEAT)
+local function BezierCurve(t, p0, p1, p2)
     return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
 end
 
-local function TweenVoo(targetPos)
-    local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
-    
-    -- Congela gravidade durante o voo
-    hrp.Velocity = Vector3.new(0,0,0)
-    
+local function SmartBypassMove(targetCFrame)
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
     local startPos = hrp.Position
-    local distance = (targetPos - startPos).Magnitude
+    local endPos = targetCFrame.Position
+    local distance = (startPos - endPos).Magnitude
     
-    if distance < 15 then 
-        hrp.CFrame = CFrame.new(targetPos)
-        return 
+    -- Se estiver muito perto, vai direto
+    if distance < 50 then
+        hrp.CFrame = targetCFrame
+        return
     end
 
-    -- Ponto alto da parábola de voo
-    local altura = math.clamp(distance/3, 50, 400)
-    local p1 = startPos:Lerp(targetPos, 0.5) + Vector3.new(0, altura, 0)
-    local timeToReach = distance / 300 -- Velocidade segura Blox Fruits
-    local startTime = tick()
-
-    while tick() - startTime < timeToReach do
-        if not getgenv().Config.AutoFarm then break end
-        local t = (tick() - startTime) / timeToReach
-        hrp.CFrame = CFrame.new(Bezier(t, startPos, p1, targetPos))
-        task.wait()
-    end
+    local controlPoint = startPos:Lerp(endPos, 0.5) + Vector3.new(0, distance * 0.4, 0) -- Sobe em arco
+    local speed = 300 
+    local timeToTravel = math.clamp(distance / speed, 0.1, 15)
     
-    hrp.CFrame = CFrame.new(targetPos)
-end
-
--- ==============================================================================
--- ♻️ GERENCIADOR DE SERVIDOR (HOP LIVRE DE MEMORY LEAK)
--- ==============================================================================
-local function ServerHopInteligente()
-    local fileName = "BloxFruits_HopData.json"
-    local serversVisitados = {}
-
-    -- Lê o arquivo se existir
-    if isfile(fileName) then
-        local suc, dec = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
-        if suc and type(dec) == "table" then serversVisitados = dec end
-    end
-
-    -- Adiciona o servidor atual para não voltar
-    table.insert(serversVisitados, game.JobId)
-    if #serversVisitados > 50 then table.remove(serversVisitados, 1) end
-    writefile(fileName, HttpService:JSONEncode(serversVisitados))
-
-    print("[IA] Procurando novo servidor...")
+    local tweenValue = Instance.new("NumberValue")
+    tweenValue.Value = 0
+    local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(tweenValue, tweenInfo, {Value = 1})
     
-    local success, response = pcall(function()
-        return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+    local connection
+    connection = tweenValue.Changed:Connect(function(val)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local nextPos = BezierCurve(val, startPos, controlPoint, endPos)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(nextPos, endPos)
+        end
     end)
     
-    if success then
-        local data = HttpService:JSONDecode(response)
-        if data and data.data then
-            for _, srv in pairs(data.data) do
-                if srv.playing < srv.maxPlayers - 1 and srv.id ~= game.JobId then
-                    local jaVisitado = false
-                    for _, visitadoId in pairs(serversVisitados) do
-                        if srv.id == visitadoId then jaVisitado = true break end
-                    end
-                    if not jaVisitado then
-                        print("[IA] Pulando para o servidor: " .. srv.id)
-                        TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, player)
-                        task.wait(10)
-                    end
-                end
-            end
+    tween:Play()
+    tween.Completed:Wait()
+    connection:Disconnect()
+    tweenValue:Destroy()
+end
+
+-- 🖥️ INTERFACE GRÁFICA (HUB)
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+ScreenGui.Name = "OmegaSea1Hub"
+
+-- Botão Flutuante
+local FloatBtn = Instance.new("TextButton", ScreenGui)
+FloatBtn.Size = UDim2.new(0, 50, 0, 50)
+FloatBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
+FloatBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+FloatBtn.Text = "🌊"
+FloatBtn.TextSize = 25
+Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", FloatBtn).Color = Color3.fromRGB(0, 150, 255)
+
+local dragging, dragInput, dragStart, startPos
+FloatBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = FloatBtn.Position
+    end
+end)
+FloatBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        FloatBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+end)
+
+-- Janela Principal
+local MainWindow = Instance.new("Frame", ScreenGui)
+MainWindow.Size = UDim2.new(0, 350, 0, 450)
+MainWindow.Position = UDim2.new(0.5, -175, 0.5, -225)
+MainWindow.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainWindow.Visible = false
+Instance.new("UICorner", MainWindow).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", MainWindow).Color = Color3.fromRGB(0, 150, 255)
+
+local Title = Instance.new("TextLabel", MainWindow)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.Text = " OMEGA CORE - SEA 1"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 14
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
+
+local Scroll = Instance.new("ScrollingFrame", MainWindow)
+Scroll.Size = UDim2.new(1, -20, 1, -50)
+Scroll.Position = UDim2.new(0, 10, 0, 40)
+Scroll.BackgroundTransparency = 1
+Scroll.ScrollBarThickness = 4
+local UIList = Instance.new("UIListLayout", Scroll)
+UIList.Padding = UDim.new(0, 8)
+
+FloatBtn.MouseButton1Click:Connect(function() MainWindow.Visible = not MainWindow.Visible end)
+
+local function CreateToggle(name, callback)
+    local Btn = Instance.new("TextButton", Scroll)
+    Btn.Size = UDim2.new(1, 0, 0, 35)
+    Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    Btn.Text = name .. " [ OFF ]"
+    Btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    Btn.Font = Enum.Font.GothamSemibold
+    Btn.TextSize = 13
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 5)
+    
+    local state = false
+    Btn.MouseButton1Click:Connect(function()
+        state = not state
+        Btn.Text = state and (name .. " [ ON ]") or (name .. " [ OFF ]")
+        Btn.TextColor3 = state and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+        callback(state)
+    end)
+end
+-- =====================================================================
+-- 🗺️ OMEGA CORE SEA 1 - PARTE 2 (DATABASE DE QUESTS E SKILLS)
+-- =====================================================================
+
+-- ⚔️ SISTEMA DE AUTO SKILL EQUIPADA
+_G.AutoSkill = false
+local function UseEquippedSkills()
+    if not _G.AutoSkill then return end
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChildOfClass("Tool") then
+        local skills = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+        for _, key in pairs(skills) do
+            VirtualInputManager:SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, key, false, game)
+            task.wait(0.1)
         end
     end
 end
 
--- FIM DA PARTE 1 ===============================================================
--- ==============================================================================
--- 🧠 BLOX FRUITS SEA 1 - A.I. SYSTEM (PARTE 2 / 3)
--- Motor de Combate, Auto-Buy e Matriz de Prioridade
--- ==============================================================================
+task.spawn(function()
+    while task.wait(0.5) do
+        if _G.AutoSkill then UseEquippedSkills() end
+    end
+end)
 
--- ==============================================================================
--- ⚔️ COMBATE: AUTO-EQUIP E USO DE SKILLS INDETECTÁVEL
--- ==============================================================================
-local function EquiparArma()
-    local char = player.Character
-    if not char then return end
-    
-    -- Dá preferência para Melee (Estilo de Luta) ou Espada (Sword)
-    for _, tool in pairs(player.Backpack:GetChildren()) do
-        if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool.ToolTip == "Sword" or tool.ToolTip == "Blox Fruit") then
-            char.Humanoid:EquipTool(tool)
+-- 📚 DICIONÁRIO DE PROGRESSÃO (LEVEL 1 AO 700)
+-- Estrutura: {Level Min, Level Max, "Nome da Quest", Level da Quest na UI, "Nome do Mob", CFrame do NPC, CFrame do Mob}
+local QuestDatabase = {
+    {1, 14, "Bandit Quest1", 1, "Bandit", CFrame.new(1060, 16, 1547), CFrame.new(1148, 16, 1610)},
+    {15, 29, "Jungle Quest", 1, "Monkey", CFrame.new(-1601, 37, 153), CFrame.new(-1432, 22, 109)},
+    {30, 39, "Buggy Quest1", 1, "Pirate", CFrame.new(-1139, 4, 3824), CFrame.new(-1203, 4, 3935)},
+    {40, 59, "Buggy Quest1", 2, "Brute", CFrame.new(-1139, 4, 3824), CFrame.new(-1152, 14, 4296)},
+    {60, 74, "Desert Quest", 1, "Desert Bandit", CFrame.new(896, 6, 4388), CFrame.new(991, 5, 4443)},
+    {75, 89, "Desert Quest", 2, "Desert Officer", CFrame.new(896, 6, 4388), CFrame.new(1541, 4, 4363)},
+    {90, 99, "Snow Quest", 1, "Snow Bandit", CFrame.new(1385, 87, -1297), CFrame.new(1331, 105, -1451)},
+    {100, 119, "Snow Quest", 2, "Snowman", CFrame.new(1385, 87, -1297), CFrame.new(1324, 105, -1532)},
+    {120, 149, "Marine Quest2", 1, "Chief Petty Officer", CFrame.new(-5035, 28, 4324), CFrame.new(-4849, 20, 4323)},
+    {150, 174, "Sky Quest", 1, "Sky Bandit", CFrame.new(-4839, 717, -2619), CFrame.new(-4983, 278, -2890)},
+    {175, 189, "Sky Quest", 2, "Dark Master", CFrame.new(-4839, 717, -2619), CFrame.new(-5243, 389, -2270)},
+    {190, 210, "Prisoner Quest", 1, "Prisoner", CFrame.new(5307, 1, 474), CFrame.new(5378, 1, 622)},
+    {211, 249, "Prisoner Quest", 2, "Dangerous Prisoner", CFrame.new(5307, 1, 474), CFrame.new(5427, 1, 725)},
+    {250, 274, "Colosseum Quest", 1, "Toga Warrior", CFrame.new(-2255, 7, -3134), CFrame.new(-1805, 14, -2824)},
+    {275, 299, "Colosseum Quest", 2, "Gladiator", CFrame.new(-2255, 7, -3134), CFrame.new(-1353, 7, -3259)},
+    {300, 329, "Magma Quest", 1, "Military Soldier", CFrame.new(-5313, 11, 8515), CFrame.new(-5418, 20, 8436)},
+    {330, 374, "Magma Quest", 2, "Military Spy", CFrame.new(-5313, 11, 8515), CFrame.new(-5770, 77, 8740)},
+    {375, 399, "Fishman Quest", 1, "Fishman Warrior", CFrame.new(61122, 18, 1568), CFrame.new(60938, 18, 1526)},
+    {400, 449, "Fishman Quest", 2, "Fishman Commando", CFrame.new(61122, 18, 1568), CFrame.new(61845, 18, 1435)},
+    {450, 474, "Sky Exp1 Quest", 1, "God's Guard", CFrame.new(-4721, 844, -1950), CFrame.new(-4698, 844, -1910)},
+    {475, 524, "Sky Exp1 Quest", 2, "Shanda", CFrame.new(-4721, 844, -1950), CFrame.new(-7667, 5598, -463)},
+    {525, 549, "Sky Exp2 Quest", 1, "Royal Squad", CFrame.new(-7903, 5635, -391), CFrame.new(-7671, 5606, -1451)},
+    {550, 624, "Sky Exp2 Quest", 2, "Royal Soldier", CFrame.new(-7903, 5635, -391), CFrame.new(-7821, 5605, -1743)},
+    {625, 649, "Fountain Quest", 1, "Galley Pirate", CFrame.new(5256, 38, 4050), CFrame.new(5566, 38, 3986)},
+    {650, 700, "Fountain Quest", 2, "Galley Captain", CFrame.new(5256, 38, 4050), CFrame.new(5684, 38, 4894)}
+}
+
+-- Função de auto equipar arma (Meele ou Sword) para farmar
+local function EquipWeapon()
+    if not LocalPlayer.Character then return end
+    for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if item:IsA("Tool") and (item.ToolTip == "Melee" or item.ToolTip == "Sword" or item.ToolTip == "Blox Fruit") then
+            item.Parent = LocalPlayer.Character
             break
         end
     end
 end
+-- =====================================================================
+-- 🧠 OMEGA CORE SEA 1 - PARTE 3 (LÓGICA DO AUTO FARM E COMBATE)
+-- =====================================================================
 
-local function UsarSkills()
-    -- Aciona Z, X, C, V automaticamente da arma equipada na mão
-    -- Delay curto para não travar o servidor (Spam Check)
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
-    task.wait(0.1)
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.X, false, game)
-    task.wait(0.1)
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.C, false, game)
+local function GetQuestData()
+    local myLevel = LocalPlayer.Data.Level.Value
+    for _, data in pairs(QuestDatabase) do
+        if myLevel >= data[1] and myLevel <= data[2] then
+            return data
+        end
+    end
+    return QuestDatabase[#QuestDatabase] -- Se passar do 700, continua na última quest
 end
 
-local function AtacarAlvo(target)
-    if not target or not target:FindFirstChild("Humanoid") then return end
-    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+local function FarmQuest()
+    local data = GetQuestData()
+    local questName = data[3]
+    local questNum = data[4]
+    local mobName = data[5]
+    local npcPos = data[6]
+    local mobPos = data[7]
     
-    if target.Humanoid.Health > 0 and hrp then
-        -- Fica acima do alvo (evita hitboxes bugadas no chão e ataques do mob)
-        hrp.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, getgenv().Config.DistanciaAtaque, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-        
-        EquiparArma()
-        
-        -- Garante que o Haki (Buso) esteja ativado se já tiver comprado
-        if not player.Character:FindFirstChild("HasBuso") then
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.J, false, game)
+    local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
+    local currentQuestName = LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text
+
+    if not questActive or not string.find(currentQuestName, mobName) then
+        -- Cancelar quest errada se houver
+        if questActive then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("AbandonQuest")
+            task.wait(0.5)
         end
         
-        -- Auto Click Nativo
-        VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(0,0))
+        -- Ir até o NPC
+        SmartBypassMove(npcPos)
+        task.wait(0.5)
         
-        UsarSkills()
+        -- Puxar a Quest
+        local npc = workspace.NPCs:FindFirstChild("Quest Giver") or workspace.NPCs:FindFirstChild(questName .. " Giver")
+        if npc then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", questName, questNum)
+        end
     else
-        -- Solta o clique quando o alvo morre
-        VirtualUser:Button1Up(Vector2.new(0,0))
-    end
-end
+        -- A Quest certa está ativa, procurar os monstros
+        EquipWeapon()
+        
+        local mobEncontrado = false
+        for _, mob in pairs(workspace.Enemies:GetChildren()) do
+            if string.find(mob.Name, mobName) and mob:FindFirstChild("HumanoidRootPart") and mob.Humanoid.Health > 0 then
+                mobEncontrado = true
+                
+                -- Anti-Borracha (Collision Bypass) para bater sem levar hit
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if v:IsA("BasePart") then v.CanCollide = false end
+                    end
+                end
 
--- ==============================================================================
--- 🛒 AUTO-BUY: SISTEMA DE COMPRA E PROGRESSÃO (CommF_)
--- ==============================================================================
-local function TemItem(nomeItem)
-    -- Verifica se já comprou o item/estilo de luta
-    local inventario = ReplicatedStorage.Remotes.CommF_:InvokeServer("getInventory")
-    for _, item in pairs(inventario) do
-        if item.Name == nomeItem then return true end
-    end
-    -- Verifica status (Haki, Geppo, etc) salvos na Data do jogador
-    -- Nota: O Blox Fruits salva estilos no CommF_, isso é uma checagem de segurança
-    return false 
-end
-
-local function ChecarEComprarItens()
-    if not getgenv().Config.AutoBuyItens then return end
-    local dinheiro = player.Data.Beli.Value
-    
-    -- Tenta comprar o que está na ShopDB (Parte 1) se tiver dinheiro
-    -- (A comunicação exata muda por NPC, aqui simplificamos a lógica de Request)
-    if dinheiro >= 10000 and not TemItem("Geppo") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Geppo")
-    end
-    if dinheiro >= 25000 and not TemItem("Buso") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Buso")
-    end
-    if dinheiro >= 100000 and not TemItem("Soru") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Soru")
-    end
-    if dinheiro >= 150000 and not TemItem("Black Leg") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBlackLeg")
-    end
-    if dinheiro >= 500000 and not TemItem("Electro") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyElectro")
-    end
-    if dinheiro >= 750000 and not TemItem("Water Kung Fu") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyFishmanKarate")
-    end
-    if dinheiro >= 750000 and not TemItem("Instinct") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("KenTalk", "Buy")
-    end
-end
-
-local function PegarMissao(npcName, questName, questLevel)
-    -- Requisição invisível de missão (Não precisa teleportar pro NPC)
-    ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", questName, questLevel)
-end
-
--- ==============================================================================
--- 🧠 O CÉREBRO: MATRIZ DE PRIORIDADE DINÂMICA
--- ==============================================================================
-local function PegarDropPendente()
-    -- Checa se existe algum Boss vivo que precisamos do item
-    local levelAtual = player.Data.Level.Value
-    for _, boss in pairs(BossDB) do
-        if levelAtual >= boss.Level and not TemItem(boss.Drop) then
-            local bossModel = workspace.Enemies:FindFirstChild(boss.Nome)
-            if bossModel and bossModel:FindFirstChild("Humanoid") and bossModel.Humanoid.Health > 0 then
-                return bossModel, boss
+                -- Ficar acima/atrás do monstro
+                local targetPos = mob.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
+                SmartBypassMove(targetPos)
+                
+                -- Atacar enquanto estiver vivo
+                while mob.Humanoid.Health > 0 and _G.AutoFarmLv do
+                    targetPos = mob.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = targetPos
+                    
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    task.wait(0.1)
+                end
+                break -- Depois de matar, sai do for e procura outro
             end
         end
-    end
-    return nil, nil
-end
-
-local function ChecarBossEHop()
-    -- Se tem um boss que precisa do item, mas ele NÃO está no mapa, Hop!
-    local levelAtual = player.Data.Level.Value
-    local precisaDeBoss = false
-    
-    for _, boss in pairs(BossDB) do
-        if levelAtual >= boss.Level and not TemItem(boss.Drop) then
-            local bossModel = workspace.Enemies:FindFirstChild(boss.Nome)
-            if not bossModel then
-                precisaDeBoss = true
-                break
-            end
+        
+        -- Se não achou monstro perto, vai pro spawn deles esperar
+        if not mobEncontrado then
+            SmartBypassMove(mobPos)
         end
     end
-    
-    if precisaDeBoss and getgenv().Config.AutoHopBoss then
-        getgenv().EstadoAtual = "Boss do seu Level sem Drop não está aqui. Dando Hop..."
-        ServerHopInteligente() -- (Vem da Parte 1)
-        task.wait(5)
-    end
 end
 
--- Função principal do loop (A State Machine)
-local function LoopDeDecisao()
-    task.spawn(function()
-        while task.wait(0.1) do
-            if not getgenv().Config.AutoFarm then continue end
-            
+-- Loop Mestre do Farm Level
+task.spawn(function()
+    while task.wait() do
+        if _G.AutoFarmLv then
+            pcall(function() FarmQuest() end)
+        end
+    end
+end)
+
+-- Lógica dos Bosses (Drop Farm)
+local function FarmBosses()
+    local Bosses = {"The Saw", "Warden", "Chief Warden", "Swan", "Fishman Lord", "Thunder God", "Cyborg", "Saber Expert", "Ice Admiral"}
+    while _G.AutoBossDrops do
+        local bossFound = false
+        for _, bossName in pairs(Bosses) do
+            local boss = workspace.Enemies:FindFirstChild(bossName)
+            if boss and boss:FindFirstChild("HumanoidRootPart") and boss.Humanoid.Health > 0 then
+                bossFound = true
+                EquipWeapon()
+                while boss.Humanoid.Health > 0 and _G.AutoBossDrops do
+                    local targetPos = boss.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0)
+                    SmartBypassMove(targetPos)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    task.wait(0.1)
+                end
+            end
+        end
+        if not bossFound then task.wait(3) end
+    end
+end
+-- =====================================================================
+-- 🎛️ OMEGA CORE SEA 1 - PARTE 4 (TOGGLES DA INTERFACE)
+-- =====================================================================
+
+-- Variáveis Globais
+_G.AutoFarmLv = false
+_G.AutoBossDrops = false
+_G.AutoSaber = false
+
+-- 1. Auto Farm Level
+CreateToggle("⚔️ Auto Farm (Lv 1 - 700)", function(state)
+    _G.AutoFarmLv = state
+end)
+
+-- 2. Farm de Bosses
+CreateToggle("👑 Farmar Drops de Bosses", function(state)
+    _G.AutoBossDrops = state
+    if state then task.spawn(FarmBosses) end
+end)
+
+-- 3. Radar ESP
+CreateToggle("👁️ Radar ESP Invisível", function(state)
+    _G.RadarEnabled = state
+end)
+
+-- 4. Auto Skill
+CreateToggle("🔥 Usar Skills Equipadas", function(state)
+    _G.AutoSkill = state
+end)
+
+-- 5. Comprar Status (Aura, Geppo, Soru)
+CreateToggle("💰 Auto Comprar Haki/Passos", function(state)
+    if state then
+        local args = {"BuyHaki", "BuyGeppo", "BuySoru"}
+        for _, skill in pairs(args) do
+            pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer(skill) end)
+        end
+        -- Desliga o botão automaticamente depois de clicar
+        task.wait(1)
+        state = false
+    end
+end)
+
+-- 6. Puzzle do Saber Automático
+CreateToggle("🧩 Completar Puzzle do Saber", function(state)
+    _G.AutoSaber = state
+    if state then
+        task.spawn(function()
+            -- Esta função usa invocações diretas ao servidor (CommF_) em vez de andar
+            -- É mais seguro e rápido apertar os botões via Remote Event do que fisicamente
             pcall(function()
-                local levelAtual = player.Data.Level.Value
-                
-                -- PRIORIDADE 0: Comprar melhorias se possível
-                ChecarEComprarItens()
-                
-                -- PRIORIDADE 1: FRUTA MÍTICA NO CHÃO
-                local achouFruta = false
-                for _, obj in pairs(workspace:GetChildren()) do
-                    if obj.Name:find("Fruit") and obj:IsA("Tool") then
-                        getgenv().EstadoAtual = "Coletando Fruta: " .. obj.Name
-                        TweenVoo(obj.Handle.Position)
-                        achouFruta = true
-                        break
-                    end
-                end
-                if achouFruta then return end -- Reinicia o loop
-
-                -- PRIORIDADE 2: BOSSES E SEUS DROPS (COM SERVER HOP)
-                local alvoBoss, dadosBoss = PegarDropPendente()
-                if alvoBoss then
-                    getgenv().EstadoAtual = "Farmando Drop: " .. dadosBoss.Drop .. " do " .. dadosBoss.Nome
-                    TweenVoo(alvoBoss.HumanoidRootPart.Position)
-                    AtacarAlvo(alvoBoss)
-                    return -- Continua focando no boss
-                else
-                    -- Se o boss morreu e o item não veio (ele sumiu do mapa), checa se deve pular de server
-                    ChecarBossEHop()
-                end
-
-                -- PRIORIDADE 3: QUEST SEA 2 (NÍVEL 700)
-                if levelAtual >= 700 and getgenv().Config.AutoSea2 then
-                    getgenv().EstadoAtual = "Resolvendo Quest do Sea 2..."
-                    -- A lógica bruta da Quest do Sea 2 será engatada na Parte 3
-                    return
-                end
-
-                -- PRIORIDADE 4: FARM DE LEVEL PADRÃO
-                local questAtual = nil
-                for _, q in pairs(QuestDB) do
-                    if levelAtual >= q.Min and levelAtual <= q.Max then
-                        questAtual = q
-                        break
-                    end
-                end
-
-                if questAtual then
-                    getgenv().EstadoAtual = "Nível " .. levelAtual .. " | Farmando: " .. questAtual.Mob
-                    
-                    -- Pega a missão (O jogo ignora se já tiver pego)
-                    PegarMissao(questAtual.Npc, questAtual.Quest, questAtual.QLevel)
-                    
-                    -- Acha o mob
-                    local mobFound = false
-                    for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                        if mob.Name == questAtual.Mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                            TweenVoo(mob.HumanoidRootPart.Position)
-                            AtacarAlvo(mob)
-                            mobFound = true
-                            break
-                        end
-                    end
-                    
-                    -- Se os mobs acabaram no spot, levanta o voo pro anti-cheat não bugar no respawn
-                    if not mobFound then
-                        local char = player.Character
-                        if char and char:FindFirstChild("HumanoidRootPart") then
-                            char.HumanoidRootPart.CFrame = char.HumanoidRootPart.CFrame + Vector3.new(0, 20, 0)
-                        end
-                    end
-                end
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("ProQuestProgress", "SickMan")
+                task.wait(1)
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("ProQuestProgress", "RichMan")
             end)
-        end
-    end)
-end
-
--- ==============================================================================
--- 🚀 INICIALIZAÇÃO DA MATRIZ
--- ==============================================================================
-EnableNoclip() -- Vem da Parte 1
-LoopDeDecisao()
-
--- FIM DA PARTE 2 ===============================================================
--- ==============================================================================
--- 🧠 BLOX FRUITS SEA 1 - A.I. SYSTEM (PARTE 3 / 3)
--- Puzzle do Shanks (Saber), Missão do Sea 2 e Interface Flutuante (UI)
--- ==============================================================================
-
--- ==============================================================================
--- 🗡️ AUTO-SABER (PUZZLE DO SHANKS)
--- ==============================================================================
-local function FazerPuzzleSaber()
-    local levelAtual = player.Data.Level.Value
-    if levelAtual < 200 or TemItem("Saber") then return false end
-    
-    getgenv().EstadoAtual = "Fazendo Puzzle da Saber (Shanks)..."
-    
-    -- O Puzzle envolve botões físicos e itens que precisam ser pegos em ordem.
-    -- Para não bugar o anti-cheat, o script checa o status no Remotes do jogo.
-    
-    -- Passo 1: Botões da Selva (Apertados via Teleporte rápido)
-    local botoes = {
-        CFrame.new(-160.2, 37.3, 142.1), CFrame.new(-127.4, 38.6, 273.5),
-        CFrame.new(-282.8, 41.5, 53.6), CFrame.new(-183.1, 38.8, -43.1),
-        CFrame.new(-121.7, 37.3, -290.4)
-    }
-    
-    for _, pos in pairs(botoes) do
-        TweenVoo(pos.Position)
-        task.wait(0.5) -- Tempo para o servidor registrar o toque
-    end
-    
-    -- Nota: A lógica completa envolveria pegar a Tocha, ir pro Deserto, 
-    -- derreter a porta, pegar o Copo, ir pra Ilha de Gelo, etc.
-    -- Como a Saber é um item físico e envolve troca de instâncias, chamamos
-    -- o Boss Direto se a Relíquia já estiver liberada. Se o Shanks (Saber Expert)
-    -- estiver vivo, o bot vai matá-lo pela Matriz de Prioridade da Parte 2.
-    
-    return true
-end
-
--- ==============================================================================
--- 🌊 ROTA PARA O SEA 2 (NÍVEL 700+)
--- ==============================================================================
-local function RotaSea2()
-    local levelAtual = player.Data.Level.Value
-    if levelAtual < 700 then return end
-    
-    getgenv().EstadoAtual = "Iniciando Missão para o Sea 2..."
-    
-    -- 1. Falar com o Military Detective na Prisão
-    ReplicatedStorage.Remotes.CommF_:InvokeServer("DressrosaQuestProgress", "Detective")
-    task.wait(1)
-    
-    -- 2. Checar se o Ice Admiral está vivo na Ilha de Gelo e matar ele
-    local iceAdmiral = workspace.Enemies:FindFirstChild("Ice Admiral")
-    if iceAdmiral and iceAdmiral:FindFirstChild("Humanoid") and iceAdmiral.Humanoid.Health > 0 then
-        getgenv().EstadoAtual = "Matando Ice Admiral (Missão Sea 2)..."
-        TweenVoo(iceAdmiral.HumanoidRootPart.Position)
-        AtacarAlvo(iceAdmiral)
-        return -- Espera ele morrer
-    end
-    
-    -- 3. Falar com o Detective de novo
-    ReplicatedStorage.Remotes.CommF_:InvokeServer("DressrosaQuestProgress", "Detective2")
-    task.wait(1)
-    
-    -- 4. Falar com o Experienced Captain na Middle Town e Teleportar
-    getgenv().EstadoAtual = "Teleportando para o Sea 2!"
-    ReplicatedStorage.Remotes.CommF_:InvokeServer("TravelDressrosa")
-end
-
--- Acoplando na Matriz de Prioridade (Sobrescrevendo a Prioridade 3 da Parte 2 de forma invisível)
-task.spawn(function()
-    while task.wait(2) do
-        if getgenv().Config.AutoSea2 and player.Data.Level.Value >= 700 then
-            RotaSea2()
-        end
-        if getgenv().Config.AutoFarm and player.Data.Level.Value >= 200 and not TemItem("Saber") then
-            FazerPuzzleSaber()
-        end
-    end
-end)
-
--- ==============================================================================
--- 📱 INTERFACE FLUTUANTE (UI MODERNA PARA EXECUTORS)
--- ==============================================================================
-local CoreGui = game:GetService("CoreGui")
-local uiName = "Delta_AIBrain_UI"
-
--- Remove interface antiga se você re-executar o script
-if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = uiName
-screenGui.Parent = CoreGui
-
--- Botão Redondo Flutuante
-local btnFlutuante = Instance.new("TextButton")
-btnFlutuante.Size = UDim2.new(0, 50, 0, 50)
-btnFlutuante.Position = UDim2.new(0, 20, 0.5, -25)
-btnFlutuante.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-btnFlutuante.TextColor3 = Color3.fromRGB(0, 255, 127)
-btnFlutuante.Text = "A.I"
-btnFlutuante.Font = Enum.Font.GothamBold
-btnFlutuante.TextScaled = true
-btnFlutuante.Parent = screenGui
-
-local cornerFlutuante = Instance.new("UICorner")
-cornerFlutuante.CornerRadius = UDim.new(1, 0) -- Deixa perfeitamente redondo
-cornerFlutuante.Parent = btnFlutuante
-
-local uiStroke = Instance.new("UIStroke")
-uiStroke.Color = Color3.fromRGB(0, 255, 127)
-uiStroke.Thickness = 2
-uiStroke.Parent = btnFlutuante
-
--- Janela de Opções (Fica escondida inicialmente)
-local menuFrame = Instance.new("Frame")
-menuFrame.Size = UDim2.new(0, 220, 0, 250)
-menuFrame.Position = UDim2.new(0, 80, 0.5, -125)
-menuFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-menuFrame.Visible = false
-menuFrame.Parent = screenGui
-
-local cornerMenu = Instance.new("UICorner")
-cornerMenu.CornerRadius = UDim.new(0, 10)
-cornerMenu.Parent = menuFrame
-
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, 0, 0, 30)
-titleLabel.BackgroundTransparency = 1
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.Text = "Controle Autônomo"
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Parent = menuFrame
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -10, 0, 40)
-statusLabel.Position = UDim2.new(0, 5, 0, 30)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-statusLabel.Text = "Status: Ocioso"
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextWrapped = true
-statusLabel.Parent = menuFrame
-
--- Função para criar os botões da UI automaticamente
-local function CriarBotaoToggle(texto, pos_y, varConfig)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.9, 0, 0, 35)
-    btn.Position = UDim2.new(0.05, 0, 0, pos_y)
-    
-    local estado = getgenv().Config[varConfig]
-    btn.BackgroundColor3 = estado and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(50, 50, 50)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Text = texto .. (estado and " [ON]" or " [OFF]")
-    btn.Font = Enum.Font.GothamSemibold
-    btn.Parent = menuFrame
-    
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
-    
-    btn.MouseButton1Click:Connect(function()
-        getgenv().Config[varConfig] = not getgenv().Config[varConfig]
-        local novoEstado = getgenv().Config[varConfig]
-        btn.BackgroundColor3 = novoEstado and Color3.fromRGB(0, 150, 50) or Color3.fromRGB(50, 50, 50)
-        btn.Text = texto .. (novoEstado and " [ON]" or " [OFF]")
-    end)
-end
-
--- Criando os botões mapeados para a configuração (Config da Parte 1)
-CriarBotaoToggle("Auto Farm Nível", 70, "AutoFarm")
-CriarBotaoToggle("Auto Buy (Estilos)", 110, "AutoBuyItens")
-CriarBotaoToggle("Server Hop (Drops)", 150, "AutoHopBoss")
-CriarBotaoToggle("Auto Missão Sea 2", 190, "AutoSea2")
-
--- Abre/Fecha o Menu ao clicar no botão flutuante redondo
-btnFlutuante.MouseButton1Click:Connect(function()
-    menuFrame.Visible = not menuFrame.Visible
-end)
-
--- Atualiza a Label de Status em tempo real
-task.spawn(function()
-    while task.wait(0.5) do
-        if statusLabel and statusLabel.Parent then
-            statusLabel.Text = "Status: " .. tostring(getgenv().EstadoAtual)
-        end
-    end
-end)
-
--- Torna o Botão Redondo Arrastável (Draggable) pelo celular/mouse
-local UserInputService = game:GetService("UserInputService")
-local dragging, dragInput, dragStart, startPos
-
-local function updateInput(input)
-    local delta = input.Position - dragStart
-    btnFlutuante.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
-
-btnFlutuante.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = btnFlutuante.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            print("Eventos do Saber acionados!")
         end)
     end
 end)
 
-btnFlutuante.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        updateInput(input)
-    end
-end)
-
--- FIM DA PARTE 3 ===============================================================
--- PROJETO CONCLUÍDO E PRONTO PARA O GITHUB!
+-- Aviso no Console
+print("=======================================")
+print("✅ OMEGA CORE SEA 1 CARREGADO COM SUCESSO")
+print("=======================================")
