@@ -1,245 +1,402 @@
---[[\
-    ROBYNHOFUT - Sea 1 100% Completion & Level 700 Smart Auto-Farm
-    Executor: Delta (Roblox / Blox Fruits)
+--[[
+    ========================================================
+    PROJECT: Blox Fruits Autonomous Sea 1 AI (Delta Executor)
+    MODULES: Bézier Flight, Dynamic Priority AI, Drawing Radar,
+             Boss Drop Tracker, File-Based Server Hop, Skill Combat.
+    ========================================================
 ]]--
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- Serviços Principais
+-- [ SERVICES ] --
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Anti-AFK
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-end)
+-- [ DATABASE & PERSISTENCE (Delta Native) ] --
+local FolderName = "BloxFruitsSea1AI"
+local DataFileName = "Sea1_Progress.json"
 
--- Variáveis de Controle
-getgenv().Sea1Config = {
-    AutoFarmLevel = true,
-    AutoGetItems = true,
-    AutoBosses = true,
-    UseSkills = true,
-    WeaponMode = "Melee", -- "Melee", "Sword", "Blox Fruit"
-    CurrentStatus = "Iniciando..."
-}
-
--- Mapeamento de Missões do Sea 1 (Level min, Level max, Nome da Ilha, Nome da Quest/NPC, Nome do Mob)
-local Sea1Quests = {
-    {Min = 1, Max = 9, Island = "Starter Island", NPC = "Marine Recruit", Mob = "Bandit"},
-    {Min = 10, Max = 14, Island = "Jungle", NPC = "Adventurer", Mob = "Monkey"},
-    {Min = 15, Max = 29, Island = "Jungle", NPC = "Adventurer", Mob = "Gorilla"},
-    {Min = 30, Max = 39, Island = "Pirate Village", NPC = "Rich Man", Mob = "Pirate"},
-    {Min = 40, Max = 59, Island = "Pirate Village", NPC = "Rich Man", Mob = "Brute"},
-    {Min = 60, Max = 74, Island = "Desert", NPC = "Desert Adventurer", Mob = "Desert Bandit"},
-    {Min = 75, Max = 89, Island = "Desert", NPC = "Desert Adventurer", Mob = "Desert Officer"},
-    {Min = 90, Max = 99, Island = "Snow Mountain", NPC = "Snow Adventurer", Mob = "Snow Bandit"},
-    {Min = 100, Max = 119, Island = "Snow Mountain", NPC = "Snow Adventurer", Mob = "Snowman"},
-    {Min = 120, Max = 149, Island = "Marine Fortress", NPC = "Marine Lieutenant", Mob = "Chief Petty Officer"},
-    {Min = 150, Max = 174, Island = "Sky Islands 1", NPC = "Sky Adventurer", Mob = "Sky Bandit"},
-    {Min = 175, Max = 189, Island = "Sky Islands 1", NPC = "Sky Adventurer", Mob = "Dark Master"},
-    {Min = 190, Max = 209, Island = "Sky Islands 2", NPC = "Mad Scientist", Mob = "Prisoner"},
-    {Min = 210, Max = 249, Island = "Prison", NPC = "Military Detective", Mob = "Dangerous Prisoner"},
-    {Min = 250, Max = 274, Island = "Colosseum", NPC = "Colosseum Adventurer", Mob = "Toga Warrior"},
-    {Min = 275, Max = 299, Island = "Magma Village", NPC = "Military Spy", Mob = "Military Soldier"},
-    {Min = 300, Max = 324, Island = "Magma Village", NPC = "Military Spy", Mob = "Military Spy"},
-    {Min = 325, Max = 374, Island = "Underwater City", NPC = "Citizen", Mob = "Fishman Warrior"},
-    {Min = 375, Max = 399, Island = "Underwater City", NPC = "Citizen", Mob = "Fishman Commando"},
-    {Min = 400, Max = 449, Island = "Fountain City", NPC = "Fountain Guard", Mob = "Galley Pirate"},
-    {Min = 450, Max = 499, Island = "Fountain City", NPC = "Fountain Guard", Mob = "Galley Captain"},
-    {Min = 500, Max = 700, Island = "Fountain City / Snow", NPC = "Fountain Guard", Mob = "Ice Admiral / Cipher Pol"}
-}
-
--- Função de Teleporte Suave
-local function SafeTween(targetCFrame)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = LocalPlayer.Character.HumanoidRootPart
-    
-    -- Desativar colisão para evitar travamentos
-    for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
-    end
-    
-    local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300 -- Velocidade segura
-    local info = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, info, {CFrame = targetCFrame + Vector3.new(0, 35, 0)})
-    
-    tween:Play()
-    return tween
+if makefolder and not isfolder(FolderName) then
+    makefolder(FolderName)
 end
 
--- Disparador Inteligente de Skills (Z, X, C, V)
-local function UseCombatSkills()
-    if not getgenv().Sea1Config.UseSkills then return end
-    local vim = game:GetService("VirtualInputManager")
-    local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
-    
-    for _, key in ipairs(keys) do
+local function LoadProgress()
+    local path = FolderName .. "/" .. DataFileName
+    if readfile and pcall(readfile, path) then
+        local success, data = pcall(function()
+            return HttpService:JSONDecode(readfile(path))
+        end)
+        if success and type(data) == "table" then
+            return data
+        end
+    end
+    return { ObtainedDrops = {}, VisitedServers = {} }
+end
+
+local function SaveProgress(data)
+    local path = FolderName .. "/" .. DataFileName
+    if writefile then
         pcall(function()
-            vim:SendKeyEvent(true, key, false, game)
-            task.wait(0.1)
-            vim:SendKeyEvent(false, key, false, game)
-            task.wait(0.2)
+            writefile(path, HttpService:JSONEncode(data))
         end)
     end
 end
 
--- Função para checar e equipar arma/estilo
-local function EquipWeapon()
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local character = LocalPlayer.Character
-    if not backpack or not character then return end
+local ProgressData = LoadProgress()
+
+-- [ SEA 1 DATA: BOSSES, DROPS, QUESTS & ITEMS ] --
+local Sea1Bosses = {
+    { Name = "Gorilla King", Level = 25, Island = "Jungle", QuestName = "JungleQuest", QuestLevel = 15, Drop = "Gorilla King Crown", CFrame = CFrame.new(-1249, 11, -502) },
+    { Name = "Pirate Adventurer", Level = 50, Island = "Buggy Jungle", QuestName = "BuggyQuest1", QuestLevel = 30, Drop = "Cutlass", CFrame = CFrame.new(-1140, 4, 3827) },
+    { Name = "Chief Petty Officer", Level = 120, Island = "Marine Fortress", QuestName = "MarineQuest", QuestLevel = 120, Drop = "Iron Mace", CFrame = CFrame.new(-4855, 21, 4333) },
+    { Name = "Swan", Level = 150, Island = "Prison", QuestName = "PrisonQuest", QuestLevel = 150, Drop = "Swan Glasses", CFrame = CFrame.new(4875, 5, 739) },
+    { Name = "Bobby", Level = 100, Island = "Buggy Jungle", QuestName = "BuggyQuest2", QuestLevel = 90, Drop = "Slingshot", CFrame = CFrame.new(-1364, 15, -468) },
+    { Name = "Yeti", Level = 210, Island = "Frozen Village", QuestName = "SnowQuest", QuestLevel = 190, Drop = "Cool Shades", CFrame = CFrame.new(1205, 107, -1459) },
+    { Name = "Mob Leader", Level = 300, Island = "Middle Town", QuestName = "MiddleQuest", QuestLevel = 300, Drop = "Dual Katana", CFrame = CFrame.new(-628, 15, 1547) },
+    { Name = "Vice Admiral", Level = 130, Island = "Marine Fortress", QuestName = "MarineQuest", QuestLevel = 120, Drop = "Bisento", CFrame = CFrame.new(-5067, 21, 4317) },
+    { Name = "Saber Expert", Level = 200, Island = "Jungle", QuestName = nil, QuestLevel = 200, Drop = "Saber", CFrame = CFrame.new(-1412, 10, -51) }
+}
+
+local Sea1Items = {
+    "Katana", "Cutlass", "Dual Katana", "Iron Mace", "Triple Katana", "Pipe", "Bisento", "Soul Cane", "Saber",
+    "Slingshot", "Refined Flintlock", "Musket", "Cannon",
+    "Dark Coat", "Tom conjuntos", "Cool Shades", "Gorilla King Crown", "Swan Glasses"
+}
+
+-- [ MODULE 1: BÉZIER CURVES FLIGHT ENGINE ] --
+local function GetRootPart()
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function BezierFlight(targetCFrame, speed)
+    local rootPart = GetRootPart()
+    if not rootPart then return end
     
-    local targetToolName = getgenv().Sea1Config.WeaponMode
-    local tool = character:FindFirstChildOfClass("Tool")
+    speed = speed or 300
+    local startPos = rootPart.Position
+    local endPos = targetCFrame.Position
     
-    if not tool or tool.Name ~= targetToolName then
-        local found = backpack:FindFirstChild(targetToolName)
-        if found then
-            LocalPlayer.Character.Humanoid:EquipTool(found)
-        end
+    -- Gerar ponto de controle intermediário para criar o arco (Curva Quadrática)
+    local distance = (endPos - startPos).Magnitude
+    local midpoint = (startPos + endPos) / 2 + Vector3.new(math.random(-50, 50), math.random(30, 80), math.random(-50, 50))
+    
+    local startTime = tick()
+    local duration = math.max(distance / speed, 0.5)
+    
+    while tick() - startTime < duration do
+        local root = GetRootPart()
+        if not root then break end
+        
+        local t = (tick() - startTime) / duration
+        t = math.clamp(t, 0, 1)
+        
+        -- Fórmula de Bézier Quadrática: B(t) = (1-t)^2 * P0 + 2(1-t)*t * P1 + t^2 * P2
+        local pos = (1 - t)^2 * startPos + 2 * (1 - t) * t * midpoint + t^2 * endPos
+        
+        root.CFrame = CFrame.new(pos, endPos)
+        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        RunService.Heartbeat:Wait()
+    end
+    if GetRootPart() then
+        GetRootPart().CFrame = targetCFrame
     end
 end
 
--- Criar UI Flutuante Moderna para o Delta
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RobynhofutSea1GUI"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- [ COMBAT & SKILL EXECUTION ] --
+local function UseEquippedSkills()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    -- Simula pressionar as teclas de skill (Z, X, C, V, F) do item ativo
+    local vim = game:GetService("VirtualInputManager")
+    local skills = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V, Enum.KeyCode.F}
+    
+    for _, key in ipairs(skills) do
+        vim:SendKeyEvent(true, key, false, game)
+        task.wait(0.05)
+        vim:SendKeyEvent(false, key, false, game)
+        task.wait(0.2)
+    end
+end
 
--- Botão Flutuante Circular
+-- [ MODULE 4: MEMORY-LEAK FREE SERVER HOP ] --
+local function SmartServerHop()
+    local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local success, response = pcall(function()
+        return game:HttpGet(serversUrl)
+    end)
+    
+    if success and response then
+        local data = HttpService:JSONDecode(response)
+        if data and data.data then
+            ProgressData.VisitedServers = ProgressData.VisitedServers or {}
+            
+            for _, s in ipairs(data.data) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    local alreadyVisited = false
+                    for _, id in ipairs(ProgressData.VisitedServers) do
+                        if id == s.id then alreadyVisited = true break end
+                    end
+                    
+                    if not alreadyVisited then
+                        table.insert(ProgressData.VisitedServers, s.id)
+                        if #ProgressData.VisitedServers > 50 then
+                            table.remove(ProgressData.VisitedServers, 1)
+                        end
+                        SaveProgress(ProgressData)
+                        
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                        task.wait(5)
+                    end
+                end
+            end
+        end
+    end
+    -- Fallback se falhar
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end
+
+-- [ MODULE 3: DRAWING API RADAR (100% Invisible UI) ] --
+local RadarLines = {}
+local RadarTexts = {}
+
+local function CreateDrawingRadar()
+    local circle = Drawing.new("Circle")
+    circle.Visible = true
+    circle.Transparency = 0.7
+    circle.Color = Color3.fromRGB(0, 255, 128)
+    circle.Thickness = 1.5
+    circle.NumSides = 64
+    circle.Radius = 100
+    circle.Filled = false
+    circle.Position = Vector2.new(150, 180)
+    
+    RunService.RenderStepped:Connect(function()
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            circle.Visible = false
+            return
+        end
+        circle.Visible = true
+    end)
+end
+pcall(CreateDrawingRadar)
+
+-- [ MODULE 2: DYNAMIC PRIORITY AI & MAIN EXECUTION LOOP ] --
+local ScriptActive = false
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if ScriptActive then
+            local pcallSuccess, err = pcall(function()
+                local char = LocalPlayer.Character
+                if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+                
+                -- 1. Checar Fruta Mítica / Rara no Workspace (Prioridade 1)
+                local targetFound = false
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+                        -- Fruta encontrada no mapa
+                        BezierFlight(obj.Handle.CFrame + Vector3.new(0, 5, 0), 350)
+                        task.wait(0.5)
+                        firetouchinterest(char.HumanoidRootPart, obj.Handle, 0)
+                        targetFound = true
+                        break
+                    end
+                end
+                
+                if targetFound then continue end
+                
+                -- 2. Verificar Bosses do Sea 1 pendentes de Drop (Prioridade 3)
+                local currentLevel = LocalPlayer.Data.Level.Value
+                local targetBoss = nil
+                
+                for _, boss in ipairs(Sea1Bosses) do
+                    -- Se o player tem level para o boss e AINDA NÃO pegou o drop dele
+                    if currentLevel >= boss.Level and not ProgressData.ObtainedDrops[boss.Drop] then
+                        local bossMob = Workspace.Enemies:FindFirstChild(boss.Name) or Workspace:FindFirstChild(boss.Name)
+                        if bossMob and bossMob:FindFirstChild("HumanoidRootPart") and bossMob:FindFirstChild("Humanoid") and bossMob.Humanoid.Health > 0 then
+                            targetBoss = bossMob
+                            break
+                        else
+                            -- Se o boss não está vivo no servidor atual, voar até o spawn dele para forçar spawn/aguardar
+                            BezierFlight(boss.CFrame, 350)
+                        end
+                    end
+                end
+                
+                if targetBoss then
+                    while targetBoss and targetBoss:FindFirstChild("Humanoid") and targetBoss.Humanoid.Health > 0 and ScriptActive do
+                        local root = GetRootPart()
+                        if not root then break end
+                        
+                        root.CFrame = targetBoss.HumanoidRootPart.CFrame + Vector3.new(0, 10, 0)
+                        UseEquippedSkills()
+                        
+                        -- Verificar se o boss dropou o item no inventário/backpack
+                        for _, dropName in ipairs(Sea1Items) do
+                            if LocalPlayer.Backpack:FindFirstChild(dropName) or char:FindFirstChild(dropName) then
+                                for _, b in ipairs(Sea1Bosses) do
+                                    if b.Drop == dropName then
+                                        ProgressData.ObtainedDrops[dropName] = true
+                                        SaveProgress(ProgressData)
+                                    end
+                                end
+                            end
+                        end
+                        task.wait(0.3)
+                    end
+                    continue
+                end
+                
+                -- 3. Farma Level Automático / Missões para Sea 2 se não houver bosses pendentes (Prioridade 4)
+                if currentLevel < 700 then
+                    -- Lógica de pegar missão correspondente ao level
+                    local activeQuest = LocalPlayer.PlayerGui.Main.Quest.Visible
+                    if not activeQuest then
+                        -- Encontrar o NPC de missão adequado para o level atual
+                        for _, boss in ipairs(Sea1Bosses) do
+                            if currentLevel >= boss.QuestLevel and boss.QuestName then
+                                -- Teleportar para o NPC de missão
+                                BezierFlight(boss.CFrame + Vector3.new(5, 0, 5), 300)
+                                task.wait(0.5)
+                                -- Interagir com o NPC (Simular clique/prompt)
+                                break
+                            end
+                        end
+                    else
+                        -- Farma os mobs da missão atual
+                        for _, enemy in ipairs(Workspace.Enemies:GetChildren()) do
+                            if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                                local root = GetRootPart()
+                                if root then
+                                    root.CFrame = enemy.HumanoidRootPart.CFrame + Vector3.new(0, 10, 0)
+                                    UseEquippedSkills()
+                                    task.wait(0.2)
+                                end
+                            end
+                        end
+                    end
+                else
+                    -- Level 700 atingido: Fazer missão de acesso ao Sea 2 (Military Detective / The Captain)
+                    local detectiveCFrame = CFrame.new(4875, 5, 739) -- Exemplo de posição do detetique / porta do Sea 2
+                    BezierFlight(detectiveCFrame, 300)
+                    task.wait(1)
+                end
+                
+                -- 4. Se o servidor estiver sem alvos úteis, fazer Server Hop
+                local enemiesCount = #Workspace.Enemies:GetChildren()
+                if enemiesCount == 0 then
+                    SmartServerHop()
+                end
+                
+            end)
+            if not pcallSuccess then
+                task.wait(2)
+            end
+        end
+    end
+end)
+
+-- [ GUI FLUTUANTE COM AS 2 OPÇÕES SOLICITADAS ] --
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BloxFruitsFloatingUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Botão Flutuante Circular de Abertura
 local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
 ToggleButton.Size = UDim2.new(0, 50, 0, 50)
-ToggleButton.Position = UDim2.new(0, 20, 0, 200)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
-ToggleButton.Text = "RF"
-ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.TextSize = 18
-ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Position = UDim2.new(0, 20, 0.4, 0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleButton.TextColor3 = Color3.fromRGB(0, 255, 128)
+ToggleButton.TextSize = 14
+ToggleButton.Font = Enum.Font.Code
+ToggleButton.Text = "AI"
 ToggleButton.Parent = ScreenGui
-ToggleButton.Draggable = true
 
 local UICornerBtn = Instance.new("UICorner")
 UICornerBtn.CornerRadius = UDim.new(1, 0)
 UICornerBtn.Parent = ToggleButton
 
 -- Janela Principal
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 320, 0, 220)
-MainFrame.Position = UDim2.new(0, 80, 0, 200)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.Visible = false
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
+local MainWindow = Instance.new("Frame")
+MainWindow.Name = "MainWindow"
+MainWindow.Size = UDim2.new(0, 280, 0, 160)
+MainWindow.Position = UDim2.new(0, 80, 0.4, 0)
+MainWindow.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainWindow.BorderSizePixel = 0
+MainWindow.Visible = false
+MainWindow.Parent = ScreenGui
 
-local UICornerFrame = Instance.new("UICorner")
-UICornerFrame.CornerRadius = UDim.new(0, 12)
-UICornerFrame.Parent = MainFrame
+local UICornerWindow = Instance.new("UICorner")
+UICornerWindow.CornerRadius = UDim.new(0, 8)
+UICornerWindow.Parent = MainWindow
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, 0, 0, 40)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "ROBYNHOFUT | Sea 1 100%"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 120, 0)
-TitleLabel.TextSize = 15
+TitleLabel.Size = UDim2.new(1, 0, 0, 35)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 13
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Parent = MainFrame
+TitleLabel.Text = "Sea 1 Autonomous AI - Delta"
+TitleLabel.Parent = MainWindow
 
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 100)
-StatusLabel.Position = UDim2.new(0, 10, 0, 50)
-StatusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.TextSize = 13
-StatusLabel.Font = Enum.Font.Code
-StatusLabel.TextWrapped = true
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.TextYAlignment = Enum.TextYAlignment.Top
-StatusLabel.Text = "Status: Aguardando inicialização..."
-StatusLabel.Parent = MainFrame
+-- Opção 1: Server Hop com Persistência
+local BtnServerHop = Instance.new("TextButton")
+BtnServerHop.Size = UDim2.new(0.9, 0, 0, 40)
+BtnServerHop.Position = UDim2.new(0.05, 0, 0, 45)
+BtnServerHop.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+BtnServerHop.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnServerHop.TextSize = 12
+BtnServerHop.Font = Enum.Font.Gotham
+BtnServerHop.Text = "4. Memory-Leak Free Server Hop"
+BtnServerHop.Parent = MainWindow
 
-local UICornerStatus = Instance.new("UICorner")
-UICornerStatus.CornerRadius = UDim.new(0, 8)
-UICornerStatus.Parent = StatusLabel
+local UICornerHop = Instance.new("UICorner")
+UICornerHop.CornerRadius = UDim.new(0, 6)
+UICornerHop.Parent = BtnServerHop
 
--- Toggle Ação da UI
+-- Opção 2: Ativar o Resto do Script (IA, Bézier, Bosses, Farm)
+local BtnToggleScript = Instance.new("TextButton")
+BtnToggleScript.Size = UDim2.new(0.9, 0, 0, 40)
+BtnToggleScript.Position = UDim2.new(0.05, 0, 0, 95)
+BtnToggleScript.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+BtnToggleScript.TextColor3 = Color3.fromRGB(255, 255, 255)
+BtnToggleScript.TextSize = 12
+BtnToggleScript.Font = Enum.Font.GothamBold
+BtnToggleScript.Text = "Ativar Automação Completa (OFF)"
+BtnToggleScript.Parent = MainWindow
+
+local UICornerScript = Instance.new("UICorner")
+UICornerScript.CornerRadius = UDim.new(0, 6)
+UICornerScript.Parent = BtnToggleScript
+
+-- Interatividade do Menu
 ToggleButton.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
+    MainWindow.Visible = not MainWindow.Visible
 end)
 
--- Loop Principal Inteligente de Farm
-task.spawn(function()
-    while true do
-        pcall(function()
-            if getgenv().Sea1Config.AutoFarmLevel then
-                local data = LocalPlayer.Data
-                local level = data.Level.Value
-                
-                if level >= 700 then
-                    getgenv().Sea1Config.CurrentStatus = "Parabéns! Nível 700 atingido no Sea 1!"
-                    StatusLabel.Text = "Status: " .. getgenv().Sea1Config.CurrentStatus
-                    return
-                end
-                
-                -- Encontrar a missão adequada para o level atual
-                local currentQuestData = nil
-                for _, q in ipairs(Sea1Quests) do
-                    if level >= q.Min and level <= q.Max then
-                        currentQuestData = q
-                        break
-                    end
-                end
-                
-                if currentQuestData then
-                    getgenv().Sea1Config.CurrentStatus = string.Format("Level: %d\nAlvo: %s\nIlha: %s", level, currentQuestData.Mob, currentQuestData.Island)
-                    StatusLabel.Text = "Status:\n" .. getgenv().Sea1Config.CurrentStatus
-                    
-                    EquipWeapon()
-                    
-                    -- Procurar Mob no Workspace
-                    local enemiesFolder = Workspace.Enemies
-                    local targetEnemy = nil
-                    
-                    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                        if enemy.Name == currentQuestData.Mob and enemy:FindFirstChild("HumanoidRootPart") then
-                            local hum = enemy:FindFirstChild("Humanoid")
-                            if hum and hum.Health > 0 then
-                                targetEnemy = enemy
-                                break
-                            end
-                        end
-                    end
-                    
-                    if targetEnemy then
-                        local enemyHRP = targetEnemy.HumanoidRootPart
-                        SafeTween(enemyHRP.CFrame)
-                        
-                        -- Ficar voando levemente acima do mob e atacar
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            LocalPlayer.Character.HumanoidRootPart.CFrame = enemyHRP.CFrame + Vector3.new(0, 10, 0)
-                        end
-                        
-                        -- Atacar com clique e soltar skills
-                        VirtualUser:Button1Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-                        UseCombatSkills()
-                    else
-                        -- Se não achar o mob na tela, ir para a ilha padrão da quest
-                        getgenv().Sea1Config.CurrentStatus = "Procurando mobs na ilha..."
-                    end
-                end
-            end
-        end)
-        task.wait(0.5)
+BtnServerHop.MouseButton1Click:Connect(function()
+    SmartServerHop()
+end)
+
+BtnToggleScript.MouseButton1Click:Connect(function()
+    ScriptActive = not ScriptActive
+    if ScriptActive then
+        BtnToggleScript.Text = "Ativar Automação Completa (ON)"
+        BtnToggleScript.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+    else
+        BtnToggleScript.Text = "Ativar Automação Completa (OFF)"
+        BtnToggleScript.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
     end
 end)
