@@ -41,7 +41,6 @@ local ZonasDeFarm = {
     {LvlMin = 15, LvlMax = 29, Mob = "Gorilla", Quest = "JungleQuest", QuestLevel = 2, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1237, 6, -486)},
     {LvlMin = 30, LvlMax = 39, Mob = "Pirate", Quest = "BuggyQuest1", QuestLevel = 1, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1217, 4, 3933)},
     {LvlMin = 40, LvlMax = 59, Mob = "Brute", Quest = "BuggyQuest1", QuestLevel = 2, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1388, 14, 4280)}
-    -- Adicione mais ilhas aqui conforme for subindo de nível
 }
 
 -- ==============================================================================
@@ -102,7 +101,7 @@ local function PossuiDrop(nomeDrop)
 end
 
 local function TemMissaoAtiva()
-    -- Checagem robusta da GUI de Missão (resolve o bug de travar no NPC)
+    -- Checagem segura para evitar erros se a interface ainda estiver carregando
     local pGui = player:FindFirstChild("PlayerGui")
     if pGui and pGui:FindFirstChild("Main") then
         local quest = pGui.Main:FindFirstChild("Quest")
@@ -176,80 +175,15 @@ local function VooBezierInteligente(targetCFrame)
 end
 
 -- ==============================================================================
--- [ MÓDULO 4: IA DE MISSÕES E MATRIZ DE DECISÃO ]
+-- [ MÓDULO 4: IA DE MISSÕES, DECISÃO E SERVER HOP ]
 -- ==============================================================================
-local function AnalisarMatriz()
-    local meuLevel = player.Data.Level.Value
-
-    -- 1. Frutas Míticas/Lendárias
-    for _, obj in pairs(Workspace:GetChildren()) do
-        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
-            if string.find(obj.Name, "Dragon") or string.find(obj.Name, "Dough") or string.find(obj.Name, "Leopard") or string.find(obj.Name, "Kitsune") then
-                return {Tipo = "Fruta", Part = obj.Handle, Alvo = obj}
-            end
-        end
-    end
-
-    -- 2. Bosses com Drop Faltante E Nível Compatível
-    if Workspace:FindFirstChild("Enemies") then
-        for _, enemy in pairs(Workspace.Enemies:GetChildren()) do
-            for _, boss in ipairs(BossesSea1) do
-                if meuLevel >= boss.LvlReq and string.find(enemy.Name, boss.Nome) and not PossuiDrop(boss.Drop) then
-                    if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                        return {Tipo = "Boss", Part = enemy:FindFirstChild("HumanoidRootPart"), Alvo = enemy, Drop = boss.Drop}
-                    end
-                end
-            end
-        end
-    end
-
-    -- 3. Farme de Missões Automático
-    local zonaAtual = nil
-    for _, zona in ipairs(ZonasDeFarm) do
-        if meuLevel >= zona.LvlMin and meuLevel <= zona.LvlMax then
-            zonaAtual = zona
-            break
-        end
-    end
-    
-    if zonaAtual then
-        if not TemMissaoAtiva() then
-            return {Tipo = "PegarMissao", Part = zonaAtual.NpcPos, Alvo = "NPC (" .. zonaAtual.Mob .. ")", Zona = zonaAtual}
-        else
-            local closestMob = nil
-            local shortest = math.huge
-            local char = player.Character
-            
-            if char and char:FindFirstChild("HumanoidRootPart") and Workspace:FindFirstChild("Enemies") then
-                local hrp = char.HumanoidRootPart
-                for _, mob in pairs(Workspace.Enemies:GetChildren()) do
-                    if string.find(mob.Name, zonaAtual.Mob) and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                        local dist = (hrp.Position - mob.HumanoidRootPart.Position).Magnitude
-                        if dist < shortest then
-                            shortest = dist
-                            closestMob = mob
-                        end
-                    end
-                end
-            end
-            
-            if closestMob then
-                return {Tipo = "FarmLevel", Part = closestMob.HumanoidRootPart, Alvo = closestMob, Zona = zonaAtual}
-            else
-                return {Tipo = "AguardarMob", Part = zonaAtual.MobPos, Alvo = "Respawn de " .. zonaAtual.Mob, Zona = zonaAtual}
-            end
-        end
-    end
-
-    return nil
-end
-
 local function ExecutarServerHop()
     if not getgenv().OmegaCore_ServerHop then return end
     AtualizarRadar("Analisando", "Sem Alvos", "Iniciando Salto (Hop)...")
     
     local TPS = game:GetService("TeleportService")
-    local ApiUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    -- CORREÇÃO AQUI: RoProxy utilizado para burlar o bloqueio de API do Roblox no Executor
+    local ApiUrl = "https://games.roproxy.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
     local visitedFile = "OmegaCore_VisitedServers.json"
     local visited = {}
     
@@ -281,6 +215,69 @@ local function ExecutarServerHop()
     end)
 end
 
+local function AnalisarMatriz()
+    local meuLevel = player.Data.Level.Value
+
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
+            if string.find(obj.Name, "Dragon") or string.find(obj.Name, "Dough") or string.find(obj.Name, "Leopard") or string.find(obj.Name, "Kitsune") then
+                return {Tipo = "Fruta", Part = obj.Handle, Alvo = obj}
+            end
+        end
+    end
+
+    if Workspace:FindFirstChild("Enemies") then
+        for _, enemy in pairs(Workspace.Enemies:GetChildren()) do
+            for _, boss in ipairs(BossesSea1) do
+                if meuLevel >= boss.LvlReq and string.find(enemy.Name, boss.Nome) and not PossuiDrop(boss.Drop) then
+                    if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                        return {Tipo = "Boss", Part = enemy:FindFirstChild("HumanoidRootPart"), Alvo = enemy, Drop = boss.Drop}
+                    end
+                end
+            end
+        end
+    end
+
+    local zonaAtual = nil
+    for _, zona in ipairs(ZonasDeFarm) do
+        if meuLevel >= zona.LvlMin and meuLevel <= zona.LvlMax then
+            zonaAtual = zona
+            break
+        end
+    end
+    
+    if zonaAtual then
+        if not TemMissaoAtiva() then
+            return {Tipo = "PegarMissao", Part = zonaAtual.NpcPos, Alvo = "NPC (" .. zonaAtual.Mob .. ")", Zona = zonaAtual}
+        else
+            local closestMob = nil
+            local shortest = math.huge
+            local char = player.Character
+            
+            if char and char:FindFirstChild("HumanoidRootPart") and Workspace:FindFirstChild("Enemies") then
+                local hrp = char.HumanoidRootPart
+                for _, mob in pairs(Workspace.Enemies:GetChildren()) do
+                    if string.find(mob.Name, zonaAtual.Mob) and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                        local dist = (hrp.Position - mob.HumanoidRootPart.Position).Magnitude
+                        if dist < shortest then
+                            shortest = dist
+                            closestMob = mob
+                        end
+                    end
+                end
+            end
+            
+            if closestMob then
+                return {Tipo = "FarmLevel", Part = closestMob:FindFirstChild("HumanoidRootPart"), Alvo = closestMob, Zona = zonaAtual}
+            else
+                return {Tipo = "AguardarMob", Part = zonaAtual.MobPos, Alvo = "Respawn de " .. zonaAtual.Mob, Zona = zonaAtual}
+            end
+        end
+    end
+
+    return nil
+end
+
 local function IA_CerebroLoop()
     while task.wait(0.2) do
         if not getgenv().OmegaCore_AutoFarm then continue end
@@ -293,6 +290,9 @@ local function IA_CerebroLoop()
 
         if decisao then
             AtualizarRadar("Caçando", decisao.Alvo.Name or decisao.Alvo, "Modo: " .. decisao.Tipo)
+            
+            -- Segurança contra itens que sumiram do mapa durante a análise
+            if not decisao.Part or not decisao.Part.Parent then continue end
             local alvoPos = typeof(decisao.Part) == "CFrame" and decisao.Part.Position or decisao.Part.Position
             local dist = (hrp.Position - alvoPos).Magnitude
 
@@ -305,7 +305,7 @@ local function IA_CerebroLoop()
                     pcall(function()
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", decisao.Zona.Quest, decisao.Zona.QuestLevel)
                     end)
-                    task.wait(1) -- Aguarda a UI atualizar antes de prosseguir
+                    task.wait(1)
                 end
                 
             elseif decisao.Tipo == "FarmLevel" or decisao.Tipo == "Boss" then
@@ -313,7 +313,8 @@ local function IA_CerebroLoop()
                     local cframeDestino = typeof(decisao.Part) == "CFrame" and decisao.Part or decisao.Part.CFrame
                     VooBezierInteligente(cframeDestino * CFrame.new(0, 10, 0))
                 else
-                    hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(alvoPos.X, hrp.Position.Y, alvoPos.Z))
+                    -- CORREÇÃO AQUI: Agora ele teletransporta exatamente pra cabeça do monstro para garantir o acerto
+                    hrp.CFrame = CFrame.lookAt(alvoPos + Vector3.new(0, 7, 0), alvoPos)
                     UsarHabilidades()
                 end
                 
