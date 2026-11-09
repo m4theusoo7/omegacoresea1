@@ -34,14 +34,14 @@ local BossesSea1 = {
     {Nome = "Fishman Lord", Drop = "Trident", LvlReq = 425}
 }
 
--- Tabela Estrutural de Níveis
+-- Tabela Estrutural de Níveis (Zonas de Farm)
 local ZonasDeFarm = {
     {LvlMin = 1, LvlMax = 9, Mob = "Bandit", Quest = "BanditQuest1", QuestLevel = 1, NpcPos = CFrame.new(1059, 16, 1549), MobPos = CFrame.new(1148, 16, 1610)},
     {LvlMin = 10, LvlMax = 14, Mob = "Monkey", Quest = "JungleQuest", QuestLevel = 1, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1449, 22, 105)},
     {LvlMin = 15, LvlMax = 29, Mob = "Gorilla", Quest = "JungleQuest", QuestLevel = 2, NpcPos = CFrame.new(-1598, 37, 153), MobPos = CFrame.new(-1237, 6, -486)},
     {LvlMin = 30, LvlMax = 39, Mob = "Pirate", Quest = "BuggyQuest1", QuestLevel = 1, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1217, 4, 3933)},
     {LvlMin = 40, LvlMax = 59, Mob = "Brute", Quest = "BuggyQuest1", QuestLevel = 2, NpcPos = CFrame.new(-1139, 4, 3824), MobPos = CFrame.new(-1388, 14, 4280)}
-    -- Expanda conforme for upando de ilha
+    -- Adicione mais ilhas aqui conforme for subindo de nível
 }
 
 -- ==============================================================================
@@ -61,7 +61,9 @@ local function AtualizarRadar(acao, alvo, detalhe)
     local msg = "[ OMEGA CORE ]\n"
     msg = msg .. "Auto Farm: " .. tostring(getgenv().OmegaCore_AutoFarm) .. "\n"
     msg = msg .. "Auto Hop: " .. tostring(getgenv().OmegaCore_ServerHop) .. "\n"
-    msg = msg .. "Nível Atual: " .. tostring(player.Data.Level.Value) .. "\n"
+    if player.Data and player.Data:FindFirstChild("Level") then
+        msg = msg .. "Nível Atual: " .. tostring(player.Data.Level.Value) .. "\n"
+    end
     msg = msg .. "------------------\n"
     msg = msg .. "Ação: " .. acao .. "\n"
     if alvo then msg = msg .. "Alvo: " .. alvo .. "\n" end
@@ -82,8 +84,7 @@ local function AtivarAura()
 end
 
 local function UsarHabilidades()
-    AtivarAura() -- Garante que o Haki tá ligado
-    
+    AtivarAura()
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
     VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
     for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
@@ -101,10 +102,13 @@ local function PossuiDrop(nomeDrop)
 end
 
 local function TemMissaoAtiva()
+    -- Checagem robusta da GUI de Missão (resolve o bug de travar no NPC)
     local pGui = player:FindFirstChild("PlayerGui")
     if pGui and pGui:FindFirstChild("Main") then
         local quest = pGui.Main:FindFirstChild("Quest")
-        return (quest and quest.Visible)
+        if quest and quest.Visible then
+            return true
+        end
     end
     return false
 end
@@ -177,7 +181,7 @@ end
 local function AnalisarMatriz()
     local meuLevel = player.Data.Level.Value
 
-    -- 1. Frutas no chão
+    -- 1. Frutas Míticas/Lendárias
     for _, obj in pairs(Workspace:GetChildren()) do
         if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
             if string.find(obj.Name, "Dragon") or string.find(obj.Name, "Dough") or string.find(obj.Name, "Leopard") or string.find(obj.Name, "Kitsune") then
@@ -190,7 +194,6 @@ local function AnalisarMatriz()
     if Workspace:FindFirstChild("Enemies") then
         for _, enemy in pairs(Workspace.Enemies:GetChildren()) do
             for _, boss in ipairs(BossesSea1) do
-                -- LÓGICA CORRIGIDA: Se tiver nível >= exigido pelo boss
                 if meuLevel >= boss.LvlReq and string.find(enemy.Name, boss.Nome) and not PossuiDrop(boss.Drop) then
                     if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
                         return {Tipo = "Boss", Part = enemy:FindFirstChild("HumanoidRootPart"), Alvo = enemy, Drop = boss.Drop}
@@ -200,7 +203,7 @@ local function AnalisarMatriz()
         end
     end
 
-    -- 3. Farme Sincronizado (Missão + Nível)
+    -- 3. Farme de Missões Automático
     local zonaAtual = nil
     for _, zona in ipairs(ZonasDeFarm) do
         if meuLevel >= zona.LvlMin and meuLevel <= zona.LvlMax then
@@ -211,10 +214,8 @@ local function AnalisarMatriz()
     
     if zonaAtual then
         if not TemMissaoAtiva() then
-            -- Vai pegar a quest
             return {Tipo = "PegarMissao", Part = zonaAtual.NpcPos, Alvo = "NPC (" .. zonaAtual.Mob .. ")", Zona = zonaAtual}
         else
-            -- Caçar o mob da quest
             local closestMob = nil
             local shortest = math.huge
             local char = player.Character
@@ -296,15 +297,15 @@ local function IA_CerebroLoop()
             local dist = (hrp.Position - alvoPos).Magnitude
 
             if decisao.Tipo == "PegarMissao" then
-                if dist > 5 then -- Correção: Aproxima muito mais do NPC antes de tentar interagir
+                if dist > 8 then
                     VooBezierInteligente(decisao.Part)
                 else
                     hrp.CFrame = decisao.Part
-                    task.wait(0.5) -- Pausa rápida para o servidor registrar a posição
+                    task.wait(0.2)
                     pcall(function()
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", decisao.Zona.Quest, decisao.Zona.QuestLevel)
                     end)
-                    task.wait(1.5) -- Espera a quest aparecer na tela
+                    task.wait(1) -- Aguarda a UI atualizar antes de prosseguir
                 end
                 
             elseif decisao.Tipo == "FarmLevel" or decisao.Tipo == "Boss" then
@@ -338,7 +339,7 @@ local function IA_CerebroLoop()
 end
 
 -- ==============================================================================
--- [ MÓDULO 5: INTERFACE (MENU) ]
+-- [ MÓDULO 5: INTERFACE (MENU FLUTUANTE) ]
 -- ==============================================================================
 local uiName = "OmegaCoreMenu"
 if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
