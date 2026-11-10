@@ -1,20 +1,24 @@
--- Configurações e Serviços
+-- Serviços e Variáveis
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Coordenada exata do NPC de Missão na Pirate Starter Island
--- (Ajuste a altura 'Y' se necessário conforme o terreno da ilha)
-local PirateStarterQuestNPC = CFrame.new(1062, 16, 1546) 
+-- Coordenada exata do NPC + um pequeno afastamento em altura e profundidade para não prender
+-- Coordenada base: (1062, 16, 1546) -> Adicionamos +5 no Y (altura) ou ajustamos o posicionamento final
+local PirateStarterQuestNPC = CFrame.new(1062, 20, 1546) 
 
--- Função de Tween para mover o personagem até o NPC com segurança
 local function tweenTo(targetCFrame)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = LocalPlayer.Character.HumanoidRootPart
     
+    -- Garante que o personagem não está ancorado antes de iniciar o movimento
+    if LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.PlatformStand = false
+    end
+    
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 350 -- Velocidade de voo/teletransporte ajustada para estabilidade
+    local speed = 300 -- Velocidade estável
     local timeTake = distance / speed
     
     local tweenInfo = TweenInfo.new(timeTake, Enum.EasingStyle.Linear)
@@ -24,37 +28,48 @@ local function tweenTo(targetCFrame)
     tween.Completed:Wait()
 end
 
--- Função para verificar e aceitar a missão dos Bandits (Nível 1 a 10)
-local function getPirateStarterQuest()
-    local playerLevel = LocalPlayer.Data.Level.Value
-    
-    -- Verifica se o jogador está na faixa de nível da Pirate Starter (Lv. 1 ao 9)
-    if playerLevel < 10 then
-        -- Verifica se já possui uma missão ativa na interface
-        local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
+-- Função para verificar, pegar a missão e destravar o avatar
+local function getPirateStarterQuestSafely()
+    local success, err = pcall(function()
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Data") then return end
+        local playerLevel = LocalPlayer.Data.Level.Value
         
-        if not questActive then
-            -- Se não tiver missão, vai até o NPC
-            print("[OmegaCore]: Movendo para o NPC de Missão na Pirate Starter...")
-            tweenTo(PirateStarterQuestNPC)
+        -- Apenas para o Sea 1 / Níveis abaixo de 10
+        if playerLevel < 10 then
+            local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
             
-            task.wait(0.5)
-            
-            -- Dispara o evento remoto do jogo para interagir com o NPC e aceitar a missão
-            if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
-                -- O argumento exato aciona o diálogo do NPC de Missão dos Bandits
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
-                print("[OmegaCore]: Missão 'BanditQuest1' aceita com sucesso!")
+            if not questActive then
+                print("[OmegaCore]: Movendo para o NPC (Modo Anti-Trava)...")
+                tweenTo(PirateStarterQuestNPC)
+                
+                task.wait(0.3)
+                
+                -- Dispara o Remote para aceitar a missão dos Bandits
+                if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+                    ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
+                    print("[OmegaCore]: Missão aceita! Destravando posição...")
+                end
+                
+                -- MOVIMENTO DE ESCAPE: Dá um pequeno empurrão para a frente (frente do NPC)
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = LocalPlayer.Character.HumanoidRootPart
+                    -- Move o personagem 10 studs para frente e um pouco para cima para evitar colisões
+                    hrp.CFrame = hrp.CFrame + Vector3.new(0, 5, -10)
+                end
+                
+                task.wait(0.5) -- Pequena pausa para estabilizar a física antes de iniciar o farm de mobs
             end
         end
+    end)
+    
+    if not success then
+        warn("[OmegaCore Error]: " .. tostring(err))
     end
 end
 
--- Execução contínua da verificação de missão
+-- Loop de execução contínua
 task.spawn(function()
     while task.wait(1) do
-        pcall(function()
-            getPirateStarterQuest()
-        end)
+        getPirateStarterQuestSafely()
     end
 end)
