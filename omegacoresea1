@@ -1,283 +1,138 @@
---[[
-    ROBYNHOFUT HUB - Blox Fruits Sea 1 (Lv 1 - 700)
-    Suporte: Delta Executor
-    Funcionalidades: Botão Flutuante, Auto Farm Dinâmico, Auto Skills, Puzzle do Saber, 
-    Auto Status, Farm de Fruta, Server Hop, Preparação Sea 2.
-]]
-
-repeat task.wait() until game:IsLoaded()
+local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
-local Player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-
-_G.Config = {
-    AutoFarm = false,
-    AutoSkills = false,
-    FruitFarm = false,
-    ServerHop = false,
-    Weapon = "Melee", -- "Melee", "Sword", "Blox Fruit"
-    Distance = 7,
-    AutoBoss = false,
-    SaberPuzzle = false,
-    GoToSea2 = false,
-    BuyHaki = false
-}
-
--- Anti AFK
-Player.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
+local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================
--- 1. INTERFACE GRÁFICA (BOTÃO FLUTUANTE)
+-- 1. UI FLUTUANTE DRAGGABLE (Otimizada para Mobile)
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RobynhoFutHub"
-ScreenGui.Parent = game.CoreGui
-
-local FloatingButton = Instance.new("TextButton")
-FloatingButton.Size = UDim2.new(0, 50, 0, 50)
-FloatingButton.Position = UDim2.new(0.1, 0, 0.1, 0)
-FloatingButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-FloatingButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-FloatingButton.Text = "RF"
-FloatingButton.Font = Enum.Font.Code
-FloatingButton.TextSize = 20
-FloatingButton.UICorner = Instance.new("UICorner", FloatingButton)
-FloatingButton.UICorner.CornerRadius = UDim.new(1, 0)
-FloatingButton.Parent = ScreenGui
+ScreenGui.Name = "ModHubBase"
+-- Bypass para não aparecer em capturas de tela e injetar direto no CoreGui
+if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
+ScreenGui.Parent = CoreGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 400, 0, 350)
-MainFrame.Position = UDim2.new(0.5, -200, 0.5, -175)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.Visible = false
+MainFrame.Size = UDim2.new(0, 220, 0, 160)
+MainFrame.Position = UDim2.new(0.5, -110, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Permite arrastar na tela
 MainFrame.Parent = ScreenGui
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Text = "  RobynhoFut Hub | Sea 1"
 Title.Font = Enum.Font.Code
-Title.TextSize = 18
-Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.TextSize = 14
+Title.Text = "Painel Modular - Delta"
 Title.Parent = MainFrame
 
--- Sistema de Arrastar (Draggable)
-local dragging, dragInput, dragStart, startPos
-local function updateDrag(input)
-    local delta = input.Position - dragStart
-    MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
-Title.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
+local ToggleFarm = Instance.new("TextButton")
+ToggleFarm.Size = UDim2.new(0.85, 0, 0, 35)
+ToggleFarm.Position = UDim2.new(0.075, 0, 0.35, 0)
+ToggleFarm.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleFarm.Font = Enum.Font.Code
+ToggleFarm.TextSize = 14
+ToggleFarm.Text = "Auto-Farm: OFF"
+ToggleFarm.Parent = MainFrame
+
+-- ==========================================
+-- 2. NOCLIP DINÂMICO (Bypass Anti-Cheat)
+-- ==========================================
+local noclipEvent
+noclipEvent = RunService.Stepped:Connect(function()
+    if _G.AutoFarm then
+        -- Desativa a colisão apenas quando o farm está ativo
+        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+            if v:IsA("BasePart") and v.CanCollide then
+                v.CanCollide = false
+            end
+        end
     end
 end)
-Title.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-end)
-RunService.Heartbeat:Connect(function()
-    if dragging and dragInput then updateDrag(dragInput) end
-end)
 
-FloatingButton.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-end)
+-- ==========================================
+-- 3. RADAR ESP (Drawing API) - Limpo e sem lag
+-- ==========================================
+_G.ESP_Ativo = true
 
-local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Size = UDim2.new(1, -20, 1, -40)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 40)
-ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.UIListLayout = Instance.new("UIListLayout", ScrollFrame)
-ScrollFrame.UIListLayout.Padding = UDim.new(0, 5)
-ScrollFrame.Parent = MainFrame
+local function CreateESP(part, name, color)
+    local text = Drawing.new("Text")
+    text.Visible = false
+    text.Center = true
+    text.Outline = true
+    text.Font = 2
+    text.Color = color
+    text.Size = 15
 
-local function CreateToggle(name, configKey)
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, 0, 0, 30)
-    Btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    Btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    Btn.Text = name .. " : OFF"
-    Btn.Font = Enum.Font.Code
-    Btn.TextSize = 16
-    Btn.Parent = ScrollFrame
-    
-    Btn.MouseButton1Click:Connect(function()
-        _G.Config[configKey] = not _G.Config[configKey]
-        Btn.Text = name .. " : " .. (_G.Config[configKey] and "ON" or "OFF")
-        Btn.TextColor3 = _G.Config[configKey] and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(200, 200, 200)
+    RunService.RenderStepped:Connect(function()
+        if part and part.Parent and _G.ESP_Ativo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - part.Position).Magnitude)
+                text.Position = Vector2.new(vector.X, vector.Y)
+                text.Text = name .. " [" .. tostring(distance) .. "m]"
+                text.Visible = true
+            else
+                text.Visible = false
+            end
+        else
+            text.Visible = false
+        end
     end)
 end
 
-CreateToggle("Auto Farm Level (1-700)", "AutoFarm")
-CreateToggle("Auto Skills (Z, X, C, V)", "AutoSkills")
-CreateToggle("Auto Farm Bosses/Drops", "AutoBoss")
-CreateToggle("Auto Farm Frutas (Sniper)", "FruitFarm")
-CreateToggle("Auto Saber Puzzle (Lv 200+)", "SaberPuzzle")
-CreateToggle("Auto Comprar Habilidades (Haki/Geppo)", "BuyHaki")
-CreateToggle("Auto Ir Para Sea 2 (Lv 700+)", "GoToSea2")
+-- Exemplo de injeção do ESP em frutas (Basta chamar a função quando spawnar)
+-- CreateESP(workspace.Fruits.BiteFruit.Handle, "Bite Fruit", Color3.fromRGB(255, 50, 50))
 
 -- ==========================================
--- 2. LÓGICA DE MOVIMENTAÇÃO (TWEEN)
+-- 4. SERVER HOP PERSISTENTE (.json)
 -- ==========================================
-local function TweenTo(targetCFrame)
-    if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = Player.Character.HumanoidRootPart
-    local dist = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300
-    local tweenInfo = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+local function SalvarE PularServidor()
+    local fileName = "Hop_History.json"
+    local history = {}
     
-    hrp.Velocity = Vector3.new(0, 0, 0)
-    tween:Play()
-    return tween
-end
-
-local function EquipWeapon()
-    for _, tool in pairs(Player.Backpack:GetChildren()) do
-        if tool:IsA("Tool") and tool.ToolTip == _G.Config.Weapon then
-            Player.Character.Humanoid:EquipTool(tool)
-        end
+    -- Verifica se o arquivo existe e lê os servidores antigos
+    if isfile and isfile(fileName) then
+        local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
+        if success then history = decoded end
     end
-end
-
--- ==========================================
--- 3. ROTA DE FARMING (Lv 1 - 700)
--- ==========================================
-local function GetFarmData()
-    local lvl = Player.Data.Level.Value
-    if lvl < 15 then return "Bandit Quest Giver", "Bandit"
-    elseif lvl < 30 then return "Jungle Quest Giver", "Monkey"
-    elseif lvl < 60 then return "Pirate Village Quest Giver", "Pirate"
-    elseif lvl < 90 then return "Desert Quest Giver", "Desert Bandit"
-    elseif lvl < 120 then return "Frozen Village Quest Giver", "Snow Bandit"
-    elseif lvl < 150 then return "Marine Fortress Quest Giver", "Chief Petty Officer"
-    elseif lvl < 190 then return "Sky Quest Giver", "Sky Bandit"
-    elseif lvl < 225 then return "Prison Quest Giver", "Prisoner"
-    elseif lvl < 300 then return "Colosseum Quest Giver", "Toga Warrior"
-    elseif lvl < 375 then return "Magma Quest Giver", "Military Soldier"
-    elseif lvl < 450 then return "Fishman Quest Giver", "Fishman Warrior"
-    elseif lvl < 575 then return "Sky Quest Giver", "God's Guard"
-    elseif lvl < 700 then return "Fountain Quest Giver", "Galley Pirate"
-    else return "Fountain Quest Giver", "Galley Captain" end
+    
+    -- Registra o servidor atual para não voltar nele
+    history[game.JobId] = true
+    if writefile then
+        writefile(fileName, HttpService:JSONEncode(history))
+    end
+    
+    -- Lógica da requisição HTTP para o Roblox puxando um novo JobId entraria aqui
+    print("Histórico salvo localmente. Iniciando salto de servidor...")
 end
 
 -- ==========================================
--- 4. FUNÇÕES PRINCIPAIS (LOOP)
+-- 5. LÓGICA DOS BOTÕES
 -- ==========================================
-spawn(function()
-    while task.wait() do
-        if _G.Config.AutoFarm then
-            pcall(function()
-                local npcName, enemyName = GetFarmData()
-                
-                -- Pegar Missão
-                if not Player.PlayerGui.Main.Quest.Visible then
-                    local npc = workspace.NPCs:FindFirstChild(npcName)
-                    if npc and npc:FindFirstChild("HumanoidRootPart") then
-                        TweenTo(npc.HumanoidRootPart.CFrame)
-                        if (Player.Character.HumanoidRootPart.Position - npc.HumanoidRootPart.Position).Magnitude < 10 then
-                            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("StartQuest", npcName, 1)
-                        end
-                    end
-                else
-                    -- Matar Inimigo
-                    local enemy = workspace.Enemies:FindFirstChild(enemyName)
-                    if enemy and enemy:FindFirstChild("HumanoidRootPart") and enemy.Humanoid.Health > 0 then
-                        EquipWeapon()
-                        TweenTo(enemy.HumanoidRootPart.CFrame * CFrame.new(0, _G.Config.Distance, 0) * CFrame.Angles(math.rad(-90), 0, 0))
-                        
-                        -- Auto Click
-                        VirtualUser:ClickButton1(Vector2.new())
-                    else
-                        -- Caso não ache o inimigo, esperar respawn
-                        TweenTo(Player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 50, 0))
-                    end
-                end
-            end)
-        end
-    end
-end)
+_G.AutoFarm = false
 
--- Auto Skills
-spawn(function()
-    while task.wait(0.5) do
-        if _G.Config.AutoSkills and _G.Config.AutoFarm then
-            pcall(function()
-                local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
-                for _, key in ipairs(keys) do
-                    VirtualInputManager:SendKeyEvent(true, key, false, game)
-                    task.wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, key, false, game)
-                end
-            end)
-        end
-    end
-end)
-
--- Fruit Sniper / Farm
-spawn(function()
-    while task.wait(1) do
-        if _G.Config.FruitFarm then
-            local achouFruta = false
-            for _, v in pairs(workspace:GetChildren()) do
-                if v:IsA("Tool") and string.find(v.Name, "Fruit") then
-                    achouFruta = true
-                    TweenTo(v.Handle.CFrame)
-                    task.wait(0.5)
-                end
+ToggleFarm.MouseButton1Click:Connect(function()
+    _G.AutoFarm = not _G.AutoFarm
+    if _G.AutoFarm then
+        ToggleFarm.Text = "Auto-Farm: ON"
+        ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+        
+        -- Aqui entra o seu loop de movimentação (Ex: TweenService ou Bézier)
+        task.spawn(function()
+            while _G.AutoFarm do
+                task.wait(0.1)
+                -- print("Farm rodando...")
             end
-            if not achouFruta and _G.Config.ServerHop then
-                -- Server Hop se não houver frutas no chão
-                local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-                for _, server in pairs(Servers.data) do
-                    if server.playing < server.maxPlayers then
-                        TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, Player)
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- Auto Comprar Habilidades (Haki, Geppo, Soru)
-spawn(function()
-    while task.wait(5) do
-        if _G.Config.BuyHaki then
-            pcall(function()
-                local commF = game:GetService("ReplicatedStorage").Remotes.CommF_
-                commF:InvokeServer("BuyHaki", "Geppo")
-                commF:InvokeServer("BuyHaki", "Buso")
-                commF:InvokeServer("BuyHaki", "Soru")
-                if Player.Data.Level.Value >= 300 and _G.Config.SaberPuzzle then
-                    commF:InvokeServer("KenTalk", "Buy")
-                end
-            end)
-        end
-    end
-end)
-
--- Auto Sea 2 (Quando atingir Lv 700)
-spawn(function()
-    while task.wait(5) do
-        if _G.Config.GoToSea2 and Player.Data.Level.Value >= 700 then
-            pcall(function()
-                local commF = game:GetService("ReplicatedStorage").Remotes.CommF_
-                commF:InvokeServer("TravelDressrosa")
-            end)
-        end
+        end)
+    else
+        ToggleFarm.Text = "Auto-Farm: OFF"
+        ToggleFarm.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     end
 end)
