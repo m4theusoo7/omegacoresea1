@@ -1,166 +1,125 @@
--- ==========================================================
--- BLOX FRUITS - STARTER TO JUNGLE AUTO FARM (LV 1 a 10)
--- Executor: Delta Executor | Sea 1
--- ==========================================================
-
-if getgenv().RunningStarterFarm then
-    getgenv().RunningStarterFarm = false
-    task.wait(0.5)
-end
-getgenv().RunningStarterFarm = true
+-- Blox Fruits Sea 1: Auto-Farm Starter (Lv. 1 a 10) & Teleport para Jungle
+-- Compatível com Delta Executor
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-
 local LocalPlayer = Players.LocalPlayer
 
--- Função de segurança para pegar o Character e HumanoidRootPart
-local function getRoot()
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        return char.HumanoidRootPart
-    end
-    return nil
-end
+-- Configurações de Estado
+getgenv().Config = {
+    AutoFarm = true,
+    SelectQuest = true,
+    SelectedMonster = "Bandit [Lv. 5]",
+    TargetLevel = 10,
+    JunglePosition = CancellationToken and C3 or Vector3.new(-1249.3, 11.8, 327.5) -- Posição de chegada na Jungle
+}
 
--- Função de Tween / Teleporte suave para posições
-local function smoothTween(targetCFrame, speed)
-    local root = getRoot()
-    if not root then return end
-    
-    speed = speed or 250
-    local distance = (root.Position - targetCFrame.Position).Magnitude
-    local timeTaken = distance / speed
-    local startTime = tick()
-    
-    local startCFrame = root.CFrame
-    while tick() - startTime < timeTaken do
-        if not getgenv().RunningStarterFarm then break end
-        local alpha = (tick() - startTime) / timeTaken
-        root.CFrame = startCFrame:Lerp(targetCFrame, alpha)
-        RunService.Heartbeat:Wait()
-    end
-    if getRoot() then
-        getRoot().CFrame = targetCFrame
-    end
-end
-
--- Obter Level atual
-local function getLevel()
-    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-    if leaderstats and leaderstats:FindFirstChild("Level") then
-        return leaderstats.Level.Value
+-- Função para verificar Level atual
+local function GetLevel()
+    if LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level") then
+        return LocalPlayer.Data.Level.Value
+    elseif LocalPlayer:FindFirstChild("leaderstats") and LocalPlayer.leaderstats:FindFirstChild("Level") then
+        return LocalPlayer.leaderstats.Level.Value
     end
     return 1
 end
 
--- Detectar se é Marinha ou Pirata baseado na Equipe
-local function getTeam()
-    if LocalPlayer.Team and LocalPlayer.Team.Name == "Marine" then
-        return "Marine"
-    else
-        return "Pirate"
-    end
-end
-
--- Coordenadas de referência (Sea 1)
--- NPC de missão dos bandidos (Bandit Quest Giver)
-local QUEST_GIVERS = {
-    Pirate = CFrame.new(1062.0, 16.5, 1424.8),  -- Perto da Pirate Starter
-    Marine = CFrame.new(-2708.2, 11.9, 2045.5)   -- Perto da Marine Starter
-}
-
--- Localização dos Bandits Lv. 5
-local BANDIT_SPAWN = CFrame.new(1054.5, 16.5, 1548.8)
-
--- Ilha Jungle (Destino ao atingir Level 10)
-local JUNGLE_ISLAND = CFrame.new(-1249.8, 11.9, 327.7)
-
--- Função para simular clique de ataque
-local function attack()
+-- Função para aceitar missão automaticamente
+local function AcceptQuest()
     pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.05)
-        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end)
-end
-
--- Função para usar Skills (Z, X, C, V)
-local function useSkills()
-    pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
-            vim:SendKeyEvent(true, key, false, game)
-            task.wait(0.05)
-            vim:SendKeyEvent(false, key, false, game)
+        if GetLevel() < 10 then
+            -- Disparar evento de quest do Pirate Starter
+            local args = {
+                [1] = "StartQuest",
+                [2] = "PirateQuest1",
+                [3] = 1
+            }
+            ReplicatedStorage.Remotes.CommF_:InvokeServer(unpack(args))
         end
     end)
 end
 
--- Loop Principal de Automação
-task.spawn(function()
-    print("[Starter Farm]: Script iniciado com sucesso!")
+-- Função de Tween (Movimento suave até o alvo)
+local function TweenTo(targetCFrame, speed)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     
-    while getgenv().RunningStarterFarm do
-        task.wait(0.5)
-        local currentLevel = getLevel()
-        
-        -- Verificar se já atingiu o level 10
-        if currentLevel >= 10 then
-            print("[Starter Farm]: Level 10 atingido! Indo para a Ilha Jungle...")
-            smoothTween(JUNGLE_ISLAND, 300)
-            task.wait(1)
-            print("[Starter Farm]: Chegou na Ilha Jungle. Encerrando script.")
-            getgenv().RunningStarterFarm = false
-            break
-        end
-        
-        -- Checar se tem missão ativa
-        local questGui = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Quest")
-        local hasActiveQuest = questGui and questGui.Visible
-        
-        if not hasActiveQuest then
-            -- 1. Ir até o Doador de Missão
-            local team = getTeam()
-            local giverPos = QUEST_GIVERS[team] or QUEST_GIVERS["Pirate"]
+    local hrp = char.HumanoidRootPart
+    local distance = (hrp.Position - targetCFrame.Position).Magnitude
+    local time = distance / (speed or 250)
+    
+    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    
+    tween:Play()
+    return tween
+end
+
+-- Loop Principal de Execução
+task.spawn(function()
+    while task.wait(0.5) do
+        if getgenv().Config.AutoFarm then
+            local currentLevel = GetLevel()
             
-            print("[Starter Farm]: Indo pegar a missão de Bandidos...")
-            smoothTween(giverPos, 300)
-            task.wait(0.5)
-            
-            -- Interagir com o NPC de missão (Remotamente via ReplicatedStorage se disponível, ou encostando)
-            pcall(function()
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
-            end)
-            task.wait(0.8)
-        else
-            -- 2. Ir até os Bandits Lv.5 e farmar
-            local root = getRoot()
-            if root then
-                -- Posicionar levemente acima ou próximo aos bandidos para bater com segurança
-                smoothTween(BANDIT_SPAWN + Vector3.new(0, 5, 0), 300)
+            -- Condição para mudar para a Jungle ao atingir o Level 10
+            if currentLevel >= getgenv().Config.TargetLevel then
+                print("[Auto-Farm]: Level 10 atingido! Teleportando para a Jungle...")
                 
-                -- Ativar ataques e skills nos NPCs próximos
-                for i = 1, 5 do
-                    if not getgenv().RunningStarterFarm then break end
-                    
-                    -- Puxar / teleportar bandidos próximos para perto do player (opcional para agilizar)
-                    for _, mob in ipairs(Workspace.Enemies:GetChildren()) do
-                        if mob:FindFirstChild("Humanoid") and mob:FindFirstChild("HumanoidRootPart") and mob.Humanoid.Health > 0 then
-                            if (mob.HumanoidRootPart.Position - BANDIT_SPAWN.Position).Magnitude < 100 then
-                                mob.HumanoidRootPart.CFrame = root.CFrame * CFrame.new(0, 0, -3)
-                            end
-                        end
+                -- Teleporte suave para a Jungle Island
+                local tween = TweenTo(CFrame.new(-1249.3, 15.0, 327.5), 300)
+                if tween then
+                    tween.Completed:Wait()
+                end
+                
+                -- Desativa o loop de farm do starter
+                getgenv().Config.AutoFarm = false
+                break
+            end
+            
+            -- Verificar se tem missão ativa
+            local questUI = LocalPlayer.PlayerGui.Main.Quest
+            if not questUI.Visible then
+                AcceptQuest()
+                task.wait(1)
+            else
+                -- Procurar inimigos (Bandit) próximos
+                local enemies = workspace.Enemies:GetChildren()
+                for _, enemy in pairs(enemies) do
+                    if enemy.Name == "Bandit" and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                        
+                        repeat
+                            task.wait()
+                            if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
+                            
+                            -- Ir até o Bandit mantendo uma pequena altura
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 3, 3)
+                            
+                            -- Ativar ataques básicos (Click)
+                            pcall(function()
+                                game:GetService("VirtualUser"):Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                            end)
+                            
+                            -- Usar Habilidades em Loop (Z, X, C, V)
+                            local vim = game:GetService("VirtualInputManager")
+                            vim:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
+                            task.wait(0.1)
+                            vim:SendKeyEvent(false, Enum.KeyCode.Z, false, game)
+                            
+                            vim:SendKeyEvent(true, Enum.KeyCode.X, false, game)
+                            task.wait(0.1)
+                            vim:SendKeyEvent(false, Enum.KeyCode.X, false, game)
+                            
+                            vim:SendKeyEvent(true, Enum.KeyCode.C, false, game)
+                            task.wait(0.1)
+                            vim:SendKeyEvent(false, Enum.KeyCode.C, false, game)
+                            
+                            vim:SendKeyEvent(true, Enum.KeyCode.V, false, game)
+                            task.wait(0.1)
+                            vim:SendKeyEvent(false, Enum.KeyCode.V, false, game)
+                            
+                        until not enemy or not enemy:FindFirstChild("Humanoid") or enemy.Humanoid.Health <= 0 or not getgenv().Config.AutoFarm
                     end
-                    
-                    attack()
-                    if i % 2 == 0 then
-                        useSkills()
-                    end
-                    task.wait(0.2)
                 end
             end
         end
