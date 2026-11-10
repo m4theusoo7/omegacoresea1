@@ -1,170 +1,184 @@
--- Blox Fruits Sea 1: Auto-Farm Starter (Lv. 1 a 10) & Tween para Jungle
--- Otimizado para Delta Executor
+--[[
+    Project: OmegaCore Blox Fruits Sea 1 Automation (Lv 1 - 10+)
+    Optimized for Delta Executor / Mobile Execution
+]]
 
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- Serviços Principais
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
+
 local LocalPlayer = Players.LocalPlayer
 
--- Configurações Gerais
-getgenv().Config = {
-    AutoFarm = true,
-    TargetLevel = 10,
-    JunglePosition = CFrame.new(-1249.3, 15.0, 327.5)
-}
-
--- Criar Interface Flutuante (Botão para ligar/desligar)
-local ScreenGui = Instance.new("ScreenGui")
-local ToggleBtn = Instance.new("TextButton")
-
-ScreenGui.Name = "OmegaCore_Starter"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-ToggleBtn.Name = "ToggleButton"
-ToggleBtn.Parent = ScreenGui
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ToggleBtn.BorderColor3 = Color3.fromRGB(0, 255, 128)
-ToggleBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
-ToggleBtn.Size = UDim2.new(0, 140, 0, 40)
-ToggleBtn.Font = Enum.Font.SourceSansBold
-ToggleBtn.Text = "Farm: ON"
-ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
-ToggleBtn.TextSize = 16
-ToggleBtn.Draggable = true
-ToggleBtn.Active = true
-
-ToggleBtn.MouseButton1Click:Connect(function()
-    getgenv().Config.AutoFarm = not getgenv().Config.AutoFarm
-    if getgenv().Config.AutoFarm then
-        ToggleBtn.Text = "Farm: ON"
-        ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
-    else
-        ToggleBtn.Text = "Farm: OFF"
-        ToggleBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
-    end
+-- Anti-AFK para evitar desconexão
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- Função para checar level atual com segurança
-local function GetLevel()
-    local success, lvl = pcall(function()
-        if LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level") then
-            return LocalPlayer.Data.Level.Value
-        elseif LocalPlayer:FindFirstChild("leaderstats") and LocalPlayer.leaderstats:FindFirstChild("Level") then
-            return LocalPlayer.leaderstats.Level.Value
-        end
-        return 1
-    end)
-    return success and lvl or 1
-end
+-- Configurações e Estados do Script
+getgenv().Config = {
+    AutoFarm = false,
+    SelectedTeam = "Pirates", -- "Pirates" ou "Marines"
+    CurrentLevel = 1,
+    TargetLevelForJungle = 10,
+    TweenSpeed = 300, -- Velocidade do Tween
+    CurrentIsland = "Starter",
+}
 
--- Função para aceitar missão do Pirate Starter
-local function AcceptQuest()
-    pcall(function()
-        if GetLevel() < 10 then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "PirateQuest1", 1)
-        end
-    end)
-end
+-- Referências de Localização (Sea 1)
+local Positions = {
+    Starter = {
+        QuestGiver = CFrame.new(1059, 16, 1545),
+        MonsterPos = CFrame.new(1131, 16, 1664),
+        MonsterName = "Bandit [Lv. 5]",
+    },
+    Jungle = {
+        QuestGiver = CFrame.new(-1598, 36, 153),
+        MonsterPos = CFrame.new(-1601, 37, 133),
+        MonsterName = "Monkey [Lv. 14]",
+    }
+}
 
--- Função de Tween suave até a Jungle
+-- Função de Teletransporte Suave (Tween)
 local function TweenTo(targetCFrame)
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
     
-    local hrp = char.HumanoidRootPart
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 250
-    local time = distance / speed
+    local time = distance / Config.TweenSpeed
     
     local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame + Vector3.new(0, 15, 0)}) -- Mantém altura segura
+    
     tween:Play()
     return tween
 end
 
--- Loop de Ataque Automático por Ferramenta (Combat / Melee)
+-- Função de Ataque Automático (Fast Attack simulado)
+local function TriggerAttack()
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.05)
+        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+-- Sistema de Disparo de Habilidades (Z, X, C, V)
+local function UseSkills()
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        local skills = {"z", "x", "c", "v"}
+        for _, key in ipairs(skills) do
+            vim:SendKeyEvent(true, Enum.KeyCode[key:upper()], false, game)
+            task.wait(0.05)
+            vim:SendKeyEvent(false, Enum.KeyCode[key:upper()], false, game)
+        end
+    end)
+end
+
+-- Checagem de Nível e Atualização de Ilha
+local function UpdateProgress()
+    pcall(function()
+        local data = LocalPlayer:FindFirstChild("Data")
+        if data and data:FindFirstChild("Level") then
+            Config.CurrentLevel = data.Level.Value
+        end
+        
+        if Config.CurrentLevel >= Config.TargetLevelForJungle then
+            Config.CurrentIsland = "Jungle"
+        else
+            Config.CurrentIsland = "Starter"
+        end
+    end)
+end
+
+-- Loop Principal de Farm
 task.spawn(function()
-    while task.wait(0.2) do
-        pcall(function()
-            if getgenv().Config.AutoFarm then
-                local char = LocalPlayer.Character
-                if char then
-                    local humanoid = char:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        -- Garantir que a ferramenta de combate está equipada
-                        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
-                            if tool:IsA("Tool") and (tool.Name == "Combat" or tool.Name:find("Melee") or tool.Name:find("Blox")) then
-                                humanoid:EquipTool(tool)
+    while true do
+        task.wait(0.5)
+        if Config.AutoFarm then
+            pcall(function()
+                UpdateProgress()
+                
+                local activeQuest = LocalPlayer.PlayerGui:FindFirstChild("Main") 
+                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Quest") 
+                    and LocalPlayer.PlayerGui.Main.Quest.Visible
+                
+                local currentData = Positions[Config.CurrentIsland]
+                
+                if not activeQuest then
+                    -- Vai até o NPC pegar a missão
+                    TweenTo(currentData.QuestGiver)
+                    task.wait(1)
+                    -- Simula clique no NPC para aceitar (interação por proximidade/remote se necessário)
+                    fireclickdetector(Workspace:FindFirstChild("QuestGiver", true))
+                else
+                    -- Procura monstros na área
+                    local enemyFolder = Workspace.Enemies
+                    local targetFound = false
+                    
+                    for _, enemy in pairs(enemyFolder:GetChildren()) do
+                        if enemy.Name == currentData.MonsterName:match("([^%s]+)") and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                            targetFound = true
+                            while Config.AutoFarm and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") do
+                                task.wait(0.1)
+                                LocalPlayer.Character.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
+                                TriggerAttack()
+                                UseSkills()
                             end
                         end
-                        -- Ativar clique direto da ferramenta equipada
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        if tool and tool:FindFirstChild("Handle") then
-                            tool:Activate()
-                        end
+                    end
+                    
+                    if not targetFound then
+                        TweenTo(currentData.MonsterPos)
                     end
                 end
-            end
-        end)
+            end)
+        end
     end
 end)
 
--- Loop Principal de Farm e Progressão
-task.spawn(function()
-    while task.wait(0.5) do
-        if getgenv().Config.AutoFarm then
-            local currentLevel = GetLevel()
-            
-            -- Verificar se atingiu o Level 10 para ir à Jungle
-            if currentLevel >= getgenv().Config.TargetLevel then
-                print("[OmegaCore]: Level 10 alcançado! Indo para a Jungle...")
-                ToggleBtn.Text = "Indo p/ Jungle"
-                local tween = TweenTo(getgenv().Config.JunglePosition)
-                if tween then
-                    tween.Completed:Wait()
-                end
-                getgenv().Config.AutoFarm = false
-                ToggleBtn.Text = "Concluído"
-                break
-            end
-            
-            -- Verificar se tem missão ativa na interface
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            local questFrame = playerGui and playerGui:FindFirstChild("Main") and playerGui.Main:FindFirstChild("Quest")
-            
-            if not questFrame or not questFrame.Visible then
-                AcceptQuest()
-                task.wait(1)
-            else
-                -- Procurar inimigos Bandit na Workspace
-                local enemies = workspace:FindFirstChild("Enemies")
-                if enemies then
-                    for _, enemy in pairs(enemies:GetChildren()) do
-                        if enemy.Name == "Bandit" and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                            
-                            repeat
-                                task.wait(0.1)
-                                local char = LocalPlayer.Character
-                                if not char or not char:FindFirstChild("HumanoidRootPart") then break end
-                                
-                                -- Posicionamento fixo em cima/atrás do Bandit para o ataque registrar
-                                char.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 3, 4)
-                                
-                                -- Disparar Skills (Z, X, C) nativamente pelo teclado virtual
-                                local vim = game:GetService("VirtualInputManager")
-                                for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C}) do
-                                    vim:SendKeyEvent(true, key, false, game)
-                                    task.wait(0.05)
-                                    vim:SendKeyEvent(false, key, false, game)
-                                end
-                                
-                            until not enemy or not enemy:FindFirstChild("Humanoid") or enemy.Humanoid.Health <= 0 or not getgenv().Config.AutoFarm or GetLevel() >= 10
-                        end
-                    end
-                end
-            end
-        end
+-- Interface Gráfica Flutuante (UI)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "OmegaCoreUI"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleButton.BorderColor3 = Color3.fromRGB(0, 255, 128)
+ToggleButton.Position = UDim2.new(0.05, 0, 0.1, 0)
+ToggleButton.Size = UDim2.new(0, 140, 0, 45)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "Farm: OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 60, 60)
+ToggleButton.TextSize = 18
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+
+-- Arredondar bordas da UI
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = ToggleButton
+
+-- Ação do Botão
+ToggleButton.MouseButton1Click:Connect(function()
+    Config.AutoFarm = not Config.AutoFarm
+    if Config.AutoFarm then
+        ToggleButton.Text = "Farm: ON"
+        ToggleButton.TextColor3 = Color3.fromRGB(60, 255, 60)
+    else
+        ToggleButton.Text = "Farm: OFF"
+        ToggleButton.TextColor3 = Color3.fromRGB(255, 60, 60)
     end
 end)
