@@ -1,4 +1,3 @@
--- Garante que o Executor suporte as funções básicas
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -9,31 +8,45 @@ if PlayerGui:FindFirstChild("TaskScannerUI") then
 end
 
 -- ==========================================
--- 1. MOTOR DE VARREDURA (SCANNER)
+-- 1. MOTOR DE VARREDURA AVANÇADO (DATA CHECKER)
 -- ==========================================
 local function scanPlayerProgress()
-    local inventory = {}
+    -- Tenta acessar a pasta de dados do jogador comum no Blox Fruits
+    local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("leaderstats")
     
-    -- Mapeia itens no inventário (Backpack + Character)
-    local function checkItem(name)
-        local has = false
-        if LocalPlayer.Backpack:FindFirstChild(name) or LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name) then
-            has = true
+    local function hasItemOrStat(itemName)
+        -- 1. Checa no Backpack ou Character (Armas, Frutas físicas)
+        if LocalPlayer.Backpack:FindFirstChild(itemName) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(itemName)) then
+            return true
         end
-        -- Nota: Em jogos como Blox Fruits, muitos dados ficam em RemoteFolders ou PlayerValues. 
-        -- Aqui simulamos a checagem padrão de instâncias e atributos.
-        return has
+        
+        -- 2. Checa em valores salvos de inventário se existirem na pasta Data
+        if dataFolder then
+            local inv = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Items")
+            if inv and inv:FindFirstChild(itemName) then
+                return true
+            end
+            
+            -- Checa atributos diretos (ex: Estilos de luta salvos como valores booleanos ou strings)
+            for _, child in ipairs(dataFolder:GetChildren()) do
+                if child.Name:lower() == itemName:lower() or (child:IsA("ValueBase") and tostring(child.Value):lower() == itemName:lower()) then
+                    return true
+                end
+            end
+        end
+        
+        return false
     end
 
-    -- Exemplo de base de dados de verificação para o Sea 1 / Geral
+    -- Base de verificação adaptada para o jogo
     local tasksToCheck = {
-        { name = "Saber (Espada)", category = "Armas", completed = checkItem("Saber") },
-        { name = "Electro (Estilo de Luta)", category = "Fighting Styles", completed = checkItem("Electro") },
-        { name = "Water Kung Fu", category = "Fighting Styles", completed = checkItem("Water Kung Fu") },
-        { name = "Black Leg", category = "Fighting Styles", completed = checkItem("Black Leg") },
-        { name = "Cape (Acessório)", category = "Acessórios", completed = checkItem("Black Cape") or checkItem("Green Cape") },
-        { name = "Chegar ao Nível Máximo (Sea 1)", category = "Level", completed = (LocalPlayer.Data.Level.Value >= 700) },
-        { name = "Desbloquear Haki da Observação", category = "Hability", completed = checkItem("Observation") },
+        { name = "Saber", category = "Armas", completed = hasItemOrStat("Saber") },
+        { name = "Electro", category = "Fighting Styles", completed = hasItemOrStat("Electro") },
+        { name = "Water Kung Fu", category = "Fighting Styles", completed = hasItemOrStat("Water Kung Fu") },
+        { name = "Black Leg", category = "Fighting Styles", completed = hasItemOrStat("Black Leg") },
+        { name = "Observation", category = "Hability", completed = hasItemOrStat("Observation") or hasItemOrStat("Ken") },
+        { name = "Buso", category = "Hability", completed = hasItemOrStat("Buso") or hasItemOrStat("Armament") },
+        { name = "Level 700 (Sea 2 Ready)", category = "Level", completed = (dataFolder and dataFolder:FindFirstChild("Level") and dataFolder.Level.Value >= 700) or false },
     }
 
     local missingTasks = {}
@@ -56,11 +69,10 @@ ScreenGui.Name = "TaskScannerUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = PlayerGui
 
--- Janela Principal (Draggable / Arrastável se necessário)
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 350, 0, 400)
-MainFrame.Position = UDim2.new(0.5, -175, 0.5, -200)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.Size = UDim2.new(0, 360, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -180, 0.5, -210)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
 
@@ -70,20 +82,20 @@ UICorner.Parent = MainFrame
 
 -- Título
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Size = UDim2.new(1, 0, 0, 45)
 Title.BackgroundTransparency = 1
-Title.Text = "🔍 Pendências do Servidor & Conta"
+Title.Text = "⚙️ Motor de Pendências & Toggles"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 16
 Title.Font = Enum.Font.SourceSansBold
 Title.Parent = MainFrame
 
--- ScrollingFrame para a Lista
+-- ScrollingFrame
 local ScrollingFrame = Instance.new("ScrollingFrame")
 ScrollingFrame.Size = UDim2.new(1, -20, 1, -60)
 ScrollingFrame.Position = UDim2.new(0, 10, 0, 50)
 ScrollingFrame.BackgroundTransparency = 1
-ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #missingItems * 50)
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #missingItems * 55)
 ScrollingFrame.ScrollBarThickness = 6
 ScrollingFrame.Parent = MainFrame
 
@@ -93,67 +105,75 @@ UIListLayout.Padding = UDim.new(0, 8)
 UIListLayout.Parent = ScrollingFrame
 
 -- ==========================================
--- 3. POPULAÇÃO DINÂMICA DA UI COM TOGGLES
+-- 3. POPULAÇÃO DOS ITENS E ESTADOS ON/OFF
 -- ==========================================
--- Tabela para armazenar o estado dos toggles (On/Off)
 getgenv().TaskStates = getgenv().TaskStates or {}
 
-for i, task in ipairs(missingItems) do
-    local ItemFrame = Instance.new("Frame")
-    ItemFrame.Size = UDim2.new(1, 0, 0, 40)
-    ItemFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 52)
-    ItemFrame.BorderSizePixel = 0
-    ItemFrame.Parent = ScrollingFrame
+if #missingItems == 0 then
+    -- Caso o jogador já tenha tudo da lista de checagem
+    local EmptyLabel = Instance.new("TextLabel")
+    EmptyLabel.Size = UDim2.new(1, 0, 0, 50)
+    EmptyLabel.BackgroundTransparency = 1
+    EmptyLabel.Text = "🎉 Nenhuma pendência encontrada! Tudo concluído."
+    EmptyLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    EmptyLabel.TextSize = 14
+    EmptyLabel.Font = Enum.Font.SourceSansBold
+    EmptyLabel.Parent = ScrollingFrame
+else
+    for _, task in ipairs(missingItems) do
+        local ItemFrame = Instance.new("Frame")
+        ItemFrame.Size = UDim2.new(1, 0, 0, 45)
+        ItemFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+        ItemFrame.BorderSizePixel = 0
+        ItemFrame.Parent = ScrollingFrame
 
-    local ItemCorner = Instance.new("UICorner")
-    ItemCorner.CornerRadius = UDim.new(0, 6)
-    ItemCorner.Parent = ItemFrame
+        local ItemCorner = Instance.new("UICorner")
+        ItemCorner.CornerRadius = UDim.new(0, 6)
+        ItemCorner.Parent = ItemFrame
 
-    local TaskLabel = Instance.new("TextLabel")
-    TaskLabel.Size = UDim2.new(0.7, 0, 1, 0)
-    TaskLabel.Position = UDim2.new(0, 10, 0, 0)
-    TaskLabel.BackgroundTransparency = 1
-    TaskLabel.Text = task.name .. " (" .. task.category .. ")"
-    TaskLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-    TaskLabel.TextSize = 14
-    TaskLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TaskLabel.Font = Enum.Font.SourceSans
-    TaskLabel.Parent = ItemFrame
+        local TaskLabel = Instance.new("TextLabel")
+        TaskLabel.Size = UDim2.new(0.65, 0, 1, 0)
+        TaskLabel.Position = UDim2.new(0, 12, 0, 0)
+        TaskLabel.BackgroundTransparency = 1
+        TaskLabel.Text = task.name .. "\n[" .. task.category .. "]"
+        TaskLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
+        TaskLabel.TextSize = 13
+        TaskLabel.TextXAlignment = Enum.TextXAlignment.Left
+        TaskLabel.Font = Enum.Font.SourceSans
+        TaskLabel.Parent = ItemFrame
 
-    -- Botão Toggle (On/Off)
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(0, 60, 0, 26)
-    ToggleBtn.Position = UDim2.new(1, -70, 0.5, -13)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Vermelho = OFF por padrão
-    ToggleBtn.Text = "OFF"
-    ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ToggleBtn.TextSize = 13
-    ToggleBtn.Font = Enum.Font.SourceSansBold
-    ToggleBtn.Parent = ItemFrame
+        -- Botão Toggle On/Off
+        local ToggleBtn = Instance.new("TextButton")
+        ToggleBtn.Size = UDim2.new(0, 70, 0, 28)
+        ToggleBtn.Position = UDim2.new(1, -80, 0.5, -14)
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        ToggleBtn.Text = "OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ToggleBtn.TextSize = 13
+        ToggleBtn.Font = Enum.Font.SourceSansBold
+        ToggleBtn.Parent = ItemFrame
 
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 4)
-    ToggleCorner.Parent = ToggleBtn
+        local ToggleCorner = Instance.new("UICorner")
+        ToggleCorner.CornerRadius = UDim.new(0, 4)
+        ToggleCorner.Parent = ToggleBtn
 
-    -- Estado inicial global para essa tarefa
-    getgenv().TaskStates[task.name] = false
+        -- Estado padrão
+        getgenv().TaskStates[task.name] = false
 
-    -- Lógica do Clique do Toggle
-    ToggleBtn.MouseButton1Click:Connect(function()
-        local currentState = getgenv().TaskStates[task.name]
-        currentState = not currentState
-        getgenv().TaskStates[task.name] = currentState
+        ToggleBtn.MouseButton1Click:Connect(function()
+            local currentState = getgenv().TaskStates[task.name]
+            currentState = not currentState
+            getgenv().TaskStates[task.name] = currentState
 
-        if currentState then
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) -- Verde = ON
-            ToggleBtn.Text = "ON"
-            print("[Automation Engine] Tarefa ativada: " .. task.name)
-        else
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Vermelho = OFF
-            ToggleBtn.Text = "OFF"
-            print("[Automation Engine] Tarefa desativada: " .. task.name)
-        end
-    end)
+            if currentState then
+                ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+                ToggleBtn.Text = "ON"
+            else
+                ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                ToggleBtn.Text = "OFF"
+            end
+        end)
+    end
 end
 
-print("[Task Scanner] Interface gerada com sucesso! Itens pendentes encontrados: " .. #missingItems)
+print("[Scanner] Varredura concluída. Painel pronto.")
