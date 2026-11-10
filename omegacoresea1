@@ -1,144 +1,102 @@
---[[
-    Project: OmegaCore Blox Fruits Sea 1 Automation (Lv 1 - 10+)
-    Optimized for Delta Executor / Mobile Execution
-]]
-
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
-
--- Serviços Principais
+-- // Omega Core: Pirate Starter Quest & Auto Farm
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Anti-AFK para evitar desconexão
+-- Anti-AFK
 LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- Configurações e Estados do Script
 getgenv().Config = {
-    AutoFarm = false,
-    SelectedTeam = "Pirates", -- "Pirates" ou "Marines"
-    CurrentLevel = 1,
-    TargetLevelForJungle = 10,
-    TweenSpeed = 300, -- Velocidade do Tween
-    CurrentIsland = "Starter",
+    AutoFarmQuest = true,
+    AutoAttack = true,
+    UseSkills = true,
+    SelectedWeapon = "Combat" -- Mude para sua arma equipada, ex: "Melee", "Sword"
 }
 
--- Referências de Localização (Sea 1)
-local Positions = {
-    Starter = {
-        QuestGiver = CFrame.new(1059, 16, 1545),
-        MonsterPos = CFrame.new(1131, 16, 1664),
-        MonsterName = "Bandit [Lv. 5]",
-    },
-    Jungle = {
-        QuestGiver = CFrame.new(-1598, 36, 153),
-        MonsterPos = CFrame.new(-1601, 37, 133),
-        MonsterName = "Monkey [Lv. 14]",
-    }
-}
-
--- Função de Teletransporte Suave (Tween)
-local function TweenTo(targetCFrame)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = LocalPlayer.Character.HumanoidRootPart
+-- Função para equipar arma
+local function EquipWeapon(toolName)
+    local character = LocalPlayer.Character
+    if not character then return end
+    local backpack = LocalPlayer.Backpack
     
-    local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local time = distance / Config.TweenSpeed
-    
-    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame + Vector3.new(0, 15, 0)}) -- Mantém altura segura
-    
-    tween:Play()
-    return tween
+    local tool = character:FindFirstChild(toolName) or backpack:FindFirstChild(toolName)
+    if tool and tool:IsA("Tool") and tool.Parent == backpack then
+        character.Humanoid:EquipTool(tool)
+    end
 end
 
--- Função de Ataque Automático (Fast Attack simulado)
-local function TriggerAttack()
-    pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.05)
-        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-    end)
-end
-
--- Sistema de Disparo de Habilidades (Z, X, C, V)
-local function UseSkills()
-    pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        local skills = {"z", "x", "c", "v"}
-        for _, key in ipairs(skills) do
-            vim:SendKeyEvent(true, Enum.KeyCode[key:upper()], false, game)
-            task.wait(0.05)
-            vim:SendKeyEvent(false, Enum.KeyCode[key:upper()], false, game)
-        end
-    end)
-end
-
--- Checagem de Nível e Atualização de Ilha
-local function UpdateProgress()
-    pcall(function()
-        local data = LocalPlayer:FindFirstChild("Data")
-        if data and data:FindFirstChild("Level") then
-            Config.CurrentLevel = data.Level.Value
-        end
-        
-        if Config.CurrentLevel >= Config.TargetLevelForJungle then
-            Config.CurrentIsland = "Jungle"
-        else
-            Config.CurrentIsland = "Starter"
-        end
-    end)
-end
-
--- Loop Principal de Farm
+-- Função de Ataque Automático
 task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if Config.AutoFarm then
+    while task.wait(0.1) do
+        if getgenv().Config.AutoAttack then
             pcall(function()
-                UpdateProgress()
+                EquipWeapon(getgenv().Config.SelectedWeapon)
+                VirtualUser:Button1Down(Vector2.new(100, 100), Workspace.CurrentCamera.CFrame)
+                task.wait(0.05)
+                VirtualUser:Button1Up(Vector2.new(100, 100), Workspace.CurrentCamera.CFrame)
+            end)
+        end
+    end
+end)
+
+-- Sistema de Disparo de Skills (Z, X, C, V)
+task.spawn(function()
+    while task.wait(0.4) do
+        if getgenv().Config.UseSkills then
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+                for _, key in ipairs(keys) do
+                    vim:SendKeyEvent(true, key, false, game)
+                    task.wait(0.05)
+                    vim:SendKeyEvent(false, key, false, game)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+end)
+
+-- Pegar Missão e Farmar na Pirate Starter
+task.spawn(function()
+    while task.wait(1) do
+        if getgenv().Config.AutoFarmQuest then
+            pcall(function()
+                local character = LocalPlayer.Character
+                if not character or not character:FindFirstChild("HumanoidRootPart") then return end
                 
-                local activeQuest = LocalPlayer.PlayerGui:FindFirstChild("Main") 
-                    and LocalPlayer.PlayerGui.Main:FindFirstChild("Quest") 
-                    and LocalPlayer.PlayerGui.Main.Quest.Visible
+                local hrp = character.HumanoidRootPart
+                local questGui = LocalPlayer.PlayerGui:FindFirstChild("Main"):FindFirstChild("Quest")
                 
-                local currentData = Positions[Config.CurrentIsland]
-                
-                if not activeQuest then
-                    -- Vai até o NPC pegar a missão
-                    TweenTo(currentData.QuestGiver)
-                    task.wait(1)
-                    -- Simula clique no NPC para aceitar (interação por proximidade/remote se necessário)
-                    fireclickdetector(Workspace:FindFirstChild("QuestGiver", true))
-                else
-                    -- Procura monstros na área
-                    local enemyFolder = Workspace.Enemies
-                    local targetFound = false
+                -- Se não tiver missão ativa, pega com o NPC da Pirate Starter
+                if not questGui.Visible then
+                    -- Teleporta para o NPC de missão da Pirate Starter
+                    local questGiver = Workspace.NPCs:FindFirstChild("Adventurer") or Workspace._Map:FindFirstChild("QuestGivers", true)
                     
-                    for _, enemy in pairs(enemyFolder:GetChildren()) do
-                        if enemy.Name == currentData.MonsterName:match("([^%s]+)") and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                            targetFound = true
-                            while Config.AutoFarm and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") do
-                                task.wait(0.1)
-                                LocalPlayer.Character.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
-                                TriggerAttack()
-                                UseSkills()
-                            end
-                        end
+                    -- Se aproximar do NPC para pegar a missão
+                    if Workspace.Enemies:FindFirstChild("Bandit") then
+                        -- Aqui você pode ajustar para ir até o NPC exato da Pirate Starter
+                        hrp.CFrame = CFrame.new(1062, 16, 1441) -- Coordenada aproximada do NPC da Pirate Starter
+                        task.wait(0.5)
+                        -- Simular clique ou interação se necessário
                     end
-                    
-                    if not targetFound then
-                        TweenTo(currentData.MonsterPos)
+                else
+                    -- Se a missão estiver ativa, vai atrás dos Bandits da Pirate Starter
+                    local enemyFolder = Workspace.Enemies
+                    for _, enemy in pairs(enemyFolder:GetChildren()) do
+                        if enemy.Name == "Bandit" and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                            repeat
+                                task.wait()
+                                if not character:FindFirstChild("HumanoidRootPart") then break end
+                                hrp.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 10, 3) -- Fica ligeiramente acima/atrás para evitar dano direto
+                            until not enemy or not enemy.Parent or enemy.Humanoid.Health <= 0 or not getgenv().Config.AutoFarmQuest
+                        end
                     end
                 end
             end)
@@ -146,39 +104,4 @@ task.spawn(function()
     end
 end)
 
--- Interface Gráfica Flutuante (UI)
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OmegaCoreUI"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-local ToggleButton = Instance.new("TextButton")
-ToggleButton.Name = "ToggleButton"
-ToggleButton.Parent = ScreenGui
-ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ToggleButton.BorderColor3 = Color3.fromRGB(0, 255, 128)
-ToggleButton.Position = UDim2.new(0.05, 0, 0.1, 0)
-ToggleButton.Size = UDim2.new(0, 140, 0, 45)
-ToggleButton.Font = Enum.Font.SourceSansBold
-ToggleButton.Text = "Farm: OFF"
-ToggleButton.TextColor3 = Color3.fromRGB(255, 60, 60)
-ToggleButton.TextSize = 18
-ToggleButton.Active = true
-ToggleButton.Draggable = true
-
--- Arredondar bordas da UI
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = ToggleButton
-
--- Ação do Botão
-ToggleButton.MouseButton1Click:Connect(function()
-    Config.AutoFarm = not Config.AutoFarm
-    if Config.AutoFarm then
-        ToggleButton.Text = "Farm: ON"
-        ToggleButton.TextColor3 = Color3.fromRGB(60, 255, 60)
-    else
-        ToggleButton.Text = "Farm: OFF"
-        ToggleButton.TextColor3 = Color3.fromRGB(255, 60, 60)
-    end
-end)
+print("Script Pirate Starter carregado com sucesso no Delta Executor!")
