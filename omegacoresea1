@@ -1,17 +1,18 @@
 --[[
-    Blox Fruits - Auto Farm Quest Direto (Level 1-10 -> Jungle)
-    Otimizado para Delta Executor
+    Blox Fruits - Auto Farm Funcional Level 1-10 (Starter -> Jungle)
+    Otimizado para Delta Executor (Uso de VirtualUser e Remote Direto)
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Coordenadas exatas da Ilha Inicial (Marine / Pirate Starter)
+-- Configurações e Coordenadas
 local SETTINGS = {
     MaxLevel = 10,
     QuestNPC = CFrame.new(1059.3, 16.5, 1549.5),
@@ -48,29 +49,29 @@ local function tweenTo(targetCFrame, speed)
     return tween
 end
 
-local function executeAttacks()
+-- Função de ataque compatível com Delta (VirtualUser)
+local function attackMob()
     pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        -- Ataque básico
-        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(1000, 1000))
         task.wait(0.05)
-        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        VirtualUser:Button1Up(Vector2.new(1000, 1000))
         
-        -- Disparo de Skills (Z, X, C, V)
-        for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
-            vim:SendKeyEvent(true, key, false, game)
+        -- Dispara skills automaticamente (Z, X, C)
+        for _, key in ipairs({"z", "x", "c"}) do
+            game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
             task.wait(0.05)
-            vim:SendKeyEvent(false, key, false, game)
+            game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
         end
     end)
 end
 
--- Loop de Execução Contínua
+-- Loop Principal
 task.spawn(function()
-    print("[OmegaCore]: Script de Quest Direto Iniciado.")
+    print("[OmegaCore]: Iniciando Auto Farm Direto...")
     
     while true do
-        task.wait(0.4)
+        task.wait(0.3)
         
         pcall(function()
             local currentLevel = getLevel()
@@ -80,14 +81,14 @@ task.spawn(function()
             
             if currentLevel < SETTINGS.MaxLevel then
                 if not hasActiveQuest() then
-                    -- Vai até o NPC de quest e aceita
+                    -- Vai até o NPC e invoca a quest diretamente pelo Remote
                     tweenTo(SETTINGS.QuestNPC, 350)
-                    if (HumanoidRootPart.Position - SETTINGS.QuestNPC.Position).Magnitude < 12 then
+                    if (HumanoidRootPart.Position - SETTINGS.QuestNPC.Position).Magnitude < 15 then
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
-                        task.wait(1.5)
+                        task.wait(1)
                     end
                 else
-                    -- Missão ativa: Procura o Bandido mais próximo na pasta Enemies
+                    -- Procura inimigos ativos na pasta Enemies
                     local targetMob = nil
                     local shortestDistance = math.huge
                     
@@ -107,20 +108,18 @@ task.spawn(function()
                     end
                     
                     if targetMob then
-                        -- Posiciona em cima do mob e executa os ataques
-                        tweenTo(targetMob.CFrame + Vector3.new(0, 7, 0), 350)
-                        executeAttacks()
+                        -- Fica em cima do mob e ataca
+                        tweenTo(targetMob.CFrame + Vector3.new(0, 5, 0), 350)
+                        attackMob()
                     else
-                        -- Se não houver mobs spawnados, vai para o spawn padrão aguardar
-                        tweenTo(SETTINGS.MobSpawn + Vector3.new(0, 20, 0), 300)
+                        -- Se não achar nenhum mob vivo, vai para o spawn aguardar
+                        tweenTo(SETTINGS.MobSpawn + Vector3.new(0, 15, 0), 300)
                     end
                 end
             else
-                -- Atingiu o Level 10: Vai para a Ilha Jungle e para o script
-                print("[OmegaCore]: Level 10 atingido. Movendo para a Ilha Jungle...")
-                local t = tweenTo(SETTINGS.JungleIsland + Vector3.new(0, 50, 0), 400)
+                print("[OmegaCore]: Level 10 alcançado! Teletransportando para a Ilha Jungle...")
+                local t = tweenTo(SETTINGS.JungleIsland + Vector3.new(0, 40, 0), 400)
                 t.Completed:Wait()
-                print("[OmegaCore]: Chegou na Jungle com sucesso.")
                 script:Destroy()
             end
         end)
