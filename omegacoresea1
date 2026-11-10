@@ -1,20 +1,54 @@
--- Blox Fruits Sea 1: Auto-Farm Starter (Lv. 1 a 10) & Teleport para Jungle
+-- Blox Fruits Sea 1: Auto-Farm Starter (Lv. 1 a 10) & Tween para Jungle
 -- Otimizado para Delta Executor
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
+-- Configurações Gerais
 getgenv().Config = {
     AutoFarm = true,
     TargetLevel = 10,
-    JunglePosition = CFrame.new(-1249.3, 11.8, 327.5)
+    JunglePosition = CFrame.new(-1249.3, 15.0, 327.5)
 }
 
--- Função para obter o Level atual com segurança
+-- Criar Interface Flutuante (Botão para ligar/desligar)
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleBtn = Instance.new("TextButton")
+
+ScreenGui.Name = "OmegaCore_Starter"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+ToggleBtn.Name = "ToggleButton"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleBtn.BorderColor3 = Color3.fromRGB(0, 255, 128)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
+ToggleBtn.Size = UDim2.new(0, 140, 0, 40)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Text = "Farm: ON"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
+ToggleBtn.TextSize = 16
+ToggleBtn.Draggable = true
+ToggleBtn.Active = true
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    getgenv().Config.AutoFarm = not getgenv().Config.AutoFarm
+    if getgenv().Config.AutoFarm then
+        ToggleBtn.Text = "Farm: ON"
+        ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
+    else
+        ToggleBtn.Text = "Farm: OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
+    end
+end)
+
+-- Função para checar level atual com segurança
 local function GetLevel()
-    local success, level = pcall(function()
+    local success, lvl = pcall(function()
         if LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level") then
             return LocalPlayer.Data.Level.Value
         elseif LocalPlayer:FindFirstChild("leaderstats") and LocalPlayer.leaderstats:FindFirstChild("Level") then
@@ -22,10 +56,10 @@ local function GetLevel()
         end
         return 1
     end)
-    return success and level or 1
+    return success and lvl or 1
 end
 
--- Função para aceitar a missão do Bandit (Pirate Starter)
+-- Função para aceitar missão do Pirate Starter
 local function AcceptQuest()
     pcall(function()
         if GetLevel() < 10 then
@@ -34,14 +68,14 @@ local function AcceptQuest()
     end)
 end
 
--- Função de Tween suave
+-- Função de Tween suave até a Jungle
 local function TweenTo(targetCFrame)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     
     local hrp = char.HumanoidRootPart
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300 -- Velocidade de deslocamento
+    local speed = 250
     local time = distance / speed
     
     local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
@@ -50,24 +84,53 @@ local function TweenTo(targetCFrame)
     return tween
 end
 
--- Loop Principal de Execução
+-- Loop de Ataque Automático por Ferramenta (Combat / Melee)
+task.spawn(function()
+    while task.wait(0.2) do
+        pcall(function()
+            if getgenv().Config.AutoFarm then
+                local char = LocalPlayer.Character
+                if char then
+                    local humanoid = char:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        -- Garantir que a ferramenta de combate está equipada
+                        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+                            if tool:IsA("Tool") and (tool.Name == "Combat" or tool.Name:find("Melee") or tool.Name:find("Blox")) then
+                                humanoid:EquipTool(tool)
+                            end
+                        end
+                        -- Ativar clique direto da ferramenta equipada
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        if tool and tool:FindFirstChild("Handle") then
+                            tool:Activate()
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- Loop Principal de Farm e Progressão
 task.spawn(function()
     while task.wait(0.5) do
         if getgenv().Config.AutoFarm then
             local currentLevel = GetLevel()
             
-            -- Se atingir o Level 10, vai para a Jungle e para o script
+            -- Verificar se atingiu o Level 10 para ir à Jungle
             if currentLevel >= getgenv().Config.TargetLevel then
-                print("[Auto-Farm]: Level 10 atingido! Movendo para a Jungle...")
+                print("[OmegaCore]: Level 10 alcançado! Indo para a Jungle...")
+                ToggleBtn.Text = "Indo p/ Jungle"
                 local tween = TweenTo(getgenv().Config.JunglePosition)
                 if tween then
                     tween.Completed:Wait()
                 end
                 getgenv().Config.AutoFarm = false
+                ToggleBtn.Text = "Concluído"
                 break
             end
             
-            -- Verificar se a UI de Missão está ativa
+            -- Verificar se tem missão ativa na interface
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             local questFrame = playerGui and playerGui:FindFirstChild("Main") and playerGui.Main:FindFirstChild("Quest")
             
@@ -86,17 +149,12 @@ task.spawn(function()
                                 local char = LocalPlayer.Character
                                 if not char or not char:FindFirstChild("HumanoidRootPart") then break end
                                 
-                                -- Teleporte/Posicionamento próximo ao Bandit
-                                char.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 3, 3)
+                                -- Posicionamento fixo em cima/atrás do Bandit para o ataque registrar
+                                char.HumanoidRootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 3, 4)
                                 
-                                -- Ataque Básico (Click)
-                                pcall(function()
-                                    game:GetService("VirtualUser"):Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                                end)
-                                
-                                -- Spam de Habilidades (Z, X, C, V) em Loop
+                                -- Disparar Skills (Z, X, C) nativamente pelo teclado virtual
                                 local vim = game:GetService("VirtualInputManager")
-                                for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
+                                for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C}) do
                                     vim:SendKeyEvent(true, key, false, game)
                                     task.wait(0.05)
                                     vim:SendKeyEvent(false, key, false, game)
