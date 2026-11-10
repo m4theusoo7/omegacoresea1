@@ -1,208 +1,159 @@
---[================================================================]--
---  BLOZX FRUITS SMART ENGINE - LEVEL 1 TO 700 (FIRST SEA)
---  Optimized for Delta Executor / Mobile Exploits
---[================================================================]--
-
-if not game:IsLoaded() then game.Loaded:Wait() end
-
--- Proteção contra execuções duplas
-getgenv().SmartEngineRunning = getgenv().SmartEngineRunning or false
-if getgenv().SmartEngineRunning then
-    warn("[SmartEngine]: O motor já está em execução!")
-    return
-end
-getgenv().SmartEngineRunning = true
-
+-- Garante que o Executor suporte as funções básicas
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
-local HttpService = game:GetService("HttpService")
-
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Configurações Globais do Motor
-local Config = {
-    AutoFarm = true,
-    AutoSkills = true,
-    AutoQuest = true,
-    AutoClick = true,
-    ServerHopLimit = 50,
-    TweenSpeed = 300, -- Velocidade ajustada para segurança no Delta
-}
-
--- Estado Atual do Motor (FSM)
-local EngineState = {
-    CurrentState = "IDLE", -- IDLE, GET_QUEST, FARMING, RETREAT
-    TargetNPC = nil,
-    TargetQuestData = nil,
-    LastJobHop = ""
-}
-
--- Anti-AFK para evitar desconexão
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
-
--- Tabela de Missões do First Sea (Level 1 a 700)
-local QuestDatabase = {
-    {Min = 1, Max = 10, NPC = "Marine Recruit", QuestName = "MarineQuest", QuestIndex = 1, LevelReq = 1, Mob = "Marine", Pos = CFrame.new(-2708, 24, 2103)},
-    {Min = 10, Max = 30, NPC = "Bandit", QuestName = "BanditQuest1", QuestIndex = 1, LevelReq = 10, Mob = "Bandit", Pos = CFrame.new(1059, 16, 1549)},
-    {Min = 30, Max = 60, NPC = "Monkey", QuestName = "JungleQuest", QuestIndex = 1, LevelReq = 30, Mob = "Monkey", Pos = CFrame.new(-1598, 36, 153)},
-    {Min = 60, Max = 90, NPC = "Gorilla", QuestName = "JungleQuest", QuestIndex = 2, LevelReq = 60, Mob = "Gorilla", Pos = CFrame.new(-1242, 6, -502)},
-    {Min = 90, Max = 120, NPC = "Pirate", QuestName = "BuggyQuest1", QuestIndex = 1, LevelReq = 90, Mob = "Pirate", Pos = CFrame.new(-1140, 4, 3827)},
-    {Min = 120, Max = 150, NPC = "Brute", QuestName = "BuggyQuest1", QuestIndex = 2, LevelReq = 120, Mob = "Brute", Pos = CFrame.new(-1140, 15, 4355)},
-    {Min = 150, Max = 175, NPC = "Desert Bandit", QuestName = "DesertQuest", QuestIndex = 1, LevelReq = 150, Mob = "Desert Bandit", Pos = CFrame.new(896, 6, 4389)},
-    {Min = 175, Max = 190, NPC = "Desert Officer", QuestName = "DesertQuest", QuestIndex = 2, LevelReq = 175, Mob = "Desert Officer", Pos = CFrame.new(1573, 8, 4385)},
-    {Min = 190, Max = 210, NPC = "Snow Bandit", QuestName = "SnowQuest", QuestIndex = 1, LevelReq = 190, Mob = "Snow Bandit", Pos = CFrame.new(1389, 87, -1298)},
-    {Min = 210, Max = 250, NPC = "Snowman", QuestName = "SnowQuest", QuestIndex = 2, LevelReq = 210, Mob = "Snowman", Pos = CFrame.new(1321, 107, -1449)},
-    {Min = 250, Max = 300, NPC = "Chief Petty Officer", QuestName = "MarineQuest2", QuestIndex = 1, LevelReq = 250, Mob = "Chief Petty Officer", Pos = CFrame.new(-5039, 27, 4324)},
-    {Min = 300, Max = 325, NPC = "Sky Bandit", QuestName = "SkyQuest", QuestIndex = 1, LevelReq = 300, Mob = "Sky Bandit", Pos = CFrame.new(-4842, 718, -2623)},
-    {Min = 325, Max = 375, NPC = "Dark Master", QuestName = "SkyQuest", QuestIndex = 2, LevelReq = 325, Mob = "Dark Master", Pos = CFrame.new(-5271, 389, -2254)},
-    {Min = 375, Max = 400, NPC = "Prisoner", QuestName = "PrisonerQuest", QuestIndex = 1, LevelReq = 375, Mob = "Prisoner", Pos = CFrame.new(487, 47, 612)},
-    {Min = 400, Max = 450, NPC = "Dangerous Prisoner", QuestName = "PrisonerQuest", QuestIndex = 2, LevelReq = 400, Mob = "Dangerous Prisoner", Pos = CFrame.new(487, 47, 612)},
-    {Min = 450, Max = 475, NPC = "Toga Warrior", QuestName = "ColosseumQuest", QuestIndex = 1, LevelReq = 450, Mob = "Toga Warrior", Pos = CFrame.new(-1580, 7.5, -2985)},
-    {Min = 475, Max = 525, NPC = "Gladiator", QuestName = "ColosseumQuest", QuestIndex = 2, LevelReq = 475, Mob = "Gladiator", Pos = CFrame.new(-1390, 7.5, -3150)},
-    {Min = 525, Max = 550, NPC = "Military Soldier", QuestName = "MagmaQuest", QuestIndex = 1, LevelReq = 525, Mob = "Military Soldier", Pos = CFrame.new(-5315, 12, 8515)},
-    {Min = 550, Max = 625, NPC = "Military Spy", QuestName = "MagmaQuest", QuestIndex = 2, LevelReq = 550, Mob = "Military Spy", Pos = CFrame.new(-5809, 15, 8829)},
-    {Min = 625, Max = 700, NPC = "Fishman Warrior", QuestName = "FishmanQuest", QuestIndex = 1, LevelReq = 625, Mob = "Fishman Warrior", Pos = CFrame.new(61122, 18, 1569)}
-}
-
-local function GetCurrentLevel()
-    local stats = LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")
-    if stats then return stats.Value end
-    return 1
+-- Evita duplicação de instâncias anteriores
+if PlayerGui:FindFirstChild("TaskScannerUI") then
+    PlayerGui.TaskScannerUI:Destroy()
 end
 
-local function GetActiveQuest()
-    local questGui = PlayerGui:FindFirstChild("Quest")
-    if questGui and questGui.Visible then
-        local container = questGui:FindFirstChild("Container")
-        if container and container:FindFirstChild("QuestTitle") then
-            return container.QuestTitle.Text
+-- ==========================================
+-- 1. MOTOR DE VARREDURA (SCANNER)
+-- ==========================================
+local function scanPlayerProgress()
+    local inventory = {}
+    
+    -- Mapeia itens no inventário (Backpack + Character)
+    local function checkItem(name)
+        local has = false
+        if LocalPlayer.Backpack:FindFirstChild(name) or LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name) then
+            has = true
+        end
+        -- Nota: Em jogos como Blox Fruits, muitos dados ficam em RemoteFolders ou PlayerValues. 
+        -- Aqui simulamos a checagem padrão de instâncias e atributos.
+        return has
+    end
+
+    -- Exemplo de base de dados de verificação para o Sea 1 / Geral
+    local tasksToCheck = {
+        { name = "Saber (Espada)", category = "Armas", completed = checkItem("Saber") },
+        { name = "Electro (Estilo de Luta)", category = "Fighting Styles", completed = checkItem("Electro") },
+        { name = "Water Kung Fu", category = "Fighting Styles", completed = checkItem("Water Kung Fu") },
+        { name = "Black Leg", category = "Fighting Styles", completed = checkItem("Black Leg") },
+        { name = "Cape (Acessório)", category = "Acessórios", completed = checkItem("Black Cape") or checkItem("Green Cape") },
+        { name = "Chegar ao Nível Máximo (Sea 1)", category = "Level", completed = (LocalPlayer.Data.Level.Value >= 700) },
+        { name = "Desbloquear Haki da Observação", category = "Hability", completed = checkItem("Observation") },
+    }
+
+    local missingTasks = {}
+    for _, task in ipairs(tasksToCheck) do
+        if not task.completed then
+            table.insert(missingTasks, task)
         end
     end
-    return nil
+
+    return missingTasks
 end
 
-local function GetBestQuestData()
-    local lvl = GetCurrentLevel()
-    local best = QuestDatabase[1]
-    for _, data in ipairs(QuestDatabase) do
-        if lvl >= data.Min and lvl <= data.Max then
-            best = data
+local missingItems = scanPlayerProgress()
+
+-- ==========================================
+-- 2. CRIAÇÃO DA INTERFACE GRÁFICA (UI)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TaskScannerUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+-- Janela Principal (Draggable / Arrastável se necessário)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 350, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -175, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundTransparency = 1
+Title.Text = "🔍 Pendências do Servidor & Conta"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+-- ScrollingFrame para a Lista
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(1, -20, 1, -60)
+ScrollingFrame.Position = UDim2.new(0, 10, 0, 50)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #missingItems * 50)
+ScrollingFrame.ScrollBarThickness = 6
+ScrollingFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Parent = ScrollingFrame
+
+-- ==========================================
+-- 3. POPULAÇÃO DINÂMICA DA UI COM TOGGLES
+-- ==========================================
+-- Tabela para armazenar o estado dos toggles (On/Off)
+getgenv().TaskStates = getgenv().TaskStates or {}
+
+for i, task in ipairs(missingItems) do
+    local ItemFrame = Instance.new("Frame")
+    ItemFrame.Size = UDim2.new(1, 0, 0, 40)
+    ItemFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 52)
+    ItemFrame.BorderSizePixel = 0
+    ItemFrame.Parent = ScrollingFrame
+
+    local ItemCorner = Instance.new("UICorner")
+    ItemCorner.CornerRadius = UDim.new(0, 6)
+    ItemCorner.Parent = ItemFrame
+
+    local TaskLabel = Instance.new("TextLabel")
+    TaskLabel.Size = UDim2.new(0.7, 0, 1, 0)
+    TaskLabel.Position = UDim2.new(0, 10, 0, 0)
+    TaskLabel.BackgroundTransparency = 1
+    TaskLabel.Text = task.name .. " (" .. task.category .. ")"
+    TaskLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    TaskLabel.TextSize = 14
+    TaskLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TaskLabel.Font = Enum.Font.SourceSans
+    TaskLabel.Parent = ItemFrame
+
+    -- Botão Toggle (On/Off)
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Size = UDim2.new(0, 60, 0, 26)
+    ToggleBtn.Position = UDim2.new(1, -70, 0.5, -13)
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Vermelho = OFF por padrão
+    ToggleBtn.Text = "OFF"
+    ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleBtn.TextSize = 13
+    ToggleBtn.Font = Enum.Font.SourceSansBold
+    ToggleBtn.Parent = ItemFrame
+
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 4)
+    ToggleCorner.Parent = ToggleBtn
+
+    -- Estado inicial global para essa tarefa
+    getgenv().TaskStates[task.name] = false
+
+    -- Lógica do Clique do Toggle
+    ToggleBtn.MouseButton1Click:Connect(function()
+        local currentState = getgenv().TaskStates[task.name]
+        currentState = not currentState
+        getgenv().TaskStates[task.name] = currentState
+
+        if currentState then
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) -- Verde = ON
+            ToggleBtn.Text = "ON"
+            print("[Automation Engine] Tarefa ativada: " .. task.name)
+        else
+            ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Vermelho = OFF
+            ToggleBtn.Text = "OFF"
+            print("[Automation Engine] Tarefa desativada: " .. task.name)
         end
-    end
-    return best
-end
-
--- Movimentação Inteligente com interpolação suave
-local function SmartTween(targetCFrame)
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = char.HumanoidRootPart
-    
-    local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local time = distance / Config.TweenSpeed
-    
-    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame + Vector3.new(0, 35, 0)})
-    
-    tween:Play()
-    return tween
-end
-
--- Sistema de Ataque Automático por Cliques
-local function TriggerAttack()
-    pcall(function()
-        VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        task.wait(0.05)
-        VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end)
 end
 
--- Uso Automático de Habilidades (Z, X, C, V)
-local function TriggerSkills()
-    if not Config.AutoSkills then return end
-    local vim = game:GetService("VirtualInputManager")
-    local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
-    
-    for _, key in ipairs(keys) do
-        pcall(function()
-            vim:SendKeyEvent(true, key, false, game)
-            task.wait(0.05)
-            vim:SendKeyEvent(false, key, false, game)
-            task.wait(0.1)
-        end)
-    end
-end
-
--- Motor de Tomada de Decisão (FSM Loop Principal)
-task.spawn(function()
-    while task.wait(0.5) do
-        if Config.AutoFarm then
-            pcall(function()
-                local currentLvl = GetCurrentLevel()
-                local questData = GetBestQuestData()
-                local currentQuest = GetActiveQuest()
-                
-                -- Validação e Coleta de Missão
-                if not currentQuest or not string.find(currentQuest, questData.NPC) then
-                    EngineState.CurrentState = "GET_QUEST"
-                    local char = LocalPlayer.Character
-                    if char and char:FindFirstChild("HumanoidRootPart") then
-                        -- Ir até o NPC da missão
-                        SmartTween(questData.Pos)
-                        task.wait(1)
-                        
-                        -- Simular interação com o NPC de missão
-                        local args = {
-                            [1] = "StartQuest",
-                            [2] = questData.QuestName,
-                            [3] = questData.QuestIndex
-                        }
-                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
-                    end
-                else
-                    -- Estado de Farm Ativo
-                    EngineState.CurrentState = "FARMING"
-                    local enemiesFolder = workspace:FindFirstChild("Enemies")
-                    
-                    if enemiesFolder then
-                        local nearestEnemy = nil
-                        local shortestDist = math.huge
-                        local char = LocalPlayer.Character
-                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        
-                        if hrp then
-                            for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-                                if enemy.Name == questData.Mob and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                                    local dist = (hrp.Position - enemy.HumanoidRootPart.Position).Magnitude
-                                    if dist < shortestDist then
-                                        shortestDist = dist
-                                        nearestEnemy = enemy
-                                    end
-                                end
-                            end
-                            
-                            if nearestEnemy then
-                                local enemyHRP = nearestEnemy.HumanoidRootPart
-                                -- Posiciona em cima/atrás do NPC para evitar dano corpo a corpo
-                                SmartTween(enemyHRP.CFrame * CFrame.new(0, 20, 3))
-                                
-                                -- Executa o combate automático inteligente
-                                TriggerAttack()
-                                TriggerSkills()
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
-
-print("[SmartEngine]: Motor Inteligente iniciado com sucesso para o First Sea (Level 1-700)!")
+print("[Task Scanner] Interface gerada com sucesso! Itens pendentes encontrados: " .. #missingItems)
