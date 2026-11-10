@@ -1,5 +1,5 @@
 --[[
-    Blox Fruits - Quest Auto Farm Level 1 to 10 (Starter -> Jungle)
+    Blox Fruits - Quest Auto Farm Corrigido (Level 1-10 -> Jungle)
     Otimizado para Delta Executor
 ]]
 
@@ -11,12 +11,12 @@ local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Configurações e Coordenadas
+-- Configurações e Coordenadas da Ilha Inicial (Marine / Pirate Starter)
 local SETTINGS = {
     StarterLevelMax = 10,
-    QuestNPC = CFrame.new(1059.3, 16.5, 1549.5), -- Posição aproximada do NPC de Quest na Ilha Inicial
-    MobPosition = CFrame.new(1159.2, 16.5, 1640.8), -- Posição dos Bandits/Pirates na Ilha Inicial
-    JungleIsland = CFrame.new(-1251.1, 11.8, 3812.3), -- Posição da Ilha Jungle
+    QuestNPC = CFrame.new(1059.3, 16.5, 1549.5),   -- NPC de Quest
+    MobSpawn = CFrame.new(1159.2, 16.5, 1640.8),    -- Área de spawn dos Bandits
+    JungleIsland = CFrame.new(-1251.1, 11.8, 3812.3) -- Ilha Jungle
 }
 
 local function getLevel()
@@ -27,6 +27,7 @@ local function getLevel()
     return 1
 end
 
+-- Verificação otimizada do painel de missão na tela
 local function hasActiveQuest()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if playerGui then
@@ -34,6 +35,14 @@ local function hasActiveQuest()
         if main then
             local quest = main:FindFirstChild("Quest")
             if quest and quest.Visible then
+                -- Verifica se o texto da missão realmente apareceu
+                local container = quest:FindFirstChild("Container")
+                if container then
+                    local title = container:FindFirstChild("QuestTitle")
+                    if title and title.Visible then
+                        return true
+                    end
+                end
                 return true
             end
         end
@@ -43,6 +52,7 @@ end
 
 local function tweenTo(targetCFrame, speed)
     speed = speed or 300
+    if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
     local distance = (HumanoidRootPart.Position - targetCFrame.Position).Magnitude
     local time = distance / speed
     
@@ -70,12 +80,12 @@ local function attackTarget()
     end
 end
 
--- Loop Principal de Farm por Missões
+-- Loop Principal Atualizado
 task.spawn(function()
-    print("[OmegaCore]: Auto Farm de Missões Iniciado (Level 1-10)")
+    print("[OmegaCore]: Auto Farm Corrigido Iniciado (Level 1-10)")
     
     while true do
-        task.wait(0.5)
+        task.wait(0.3)
         
         pcall(function()
             local currentLevel = getLevel()
@@ -85,36 +95,39 @@ task.spawn(function()
             
             if currentLevel < SETTINGS.StarterLevelMax then
                 if not hasActiveQuest() then
-                    -- Passo 1: Ir até o NPC e pegar a missão
-                    tweenTo(SETTINGS.QuestNPC, 300)
-                    if (HumanoidRootPart.Position - SETTINGS.QuestNPC.Position).Magnitude < 10 then
-                        -- Dispara o evento remoto para aceitar a missão (Bandits/Quest inicial)
+                    -- Passo 1: Vai até o NPC e pega a missão via Remote
+                    tweenTo(SETTINGS.QuestNPC, 350)
+                    if (HumanoidRootPart.Position - SETTINGS.QuestNPC.Position).Magnitude < 15 then
                         ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
                         task.wait(1)
                     end
                 else
-                    -- Passo 2: Ir até os inimigos e farmar usando ataque + skills
+                    -- Passo 2: Missão ativa - Procura os Bandits reais no Workspace
                     local targetMob = nil
                     local shortestDistance = math.huge
                     
-                    for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                        if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                            local mobPart = mob:FindFirstChild("HumanoidRootPart")
-                            if mobPart then
-                                local dist = (HumanoidRootPart.Position - mobPart.Position).Magnitude
-                                if dist < shortestDistance then
-                                    shortestDistance = dist
-                                    targetMob = mobPart
+                    if workspace:FindFirstChild("Enemies") then
+                        for _, mob in pairs(workspace.Enemies:GetChildren()) do
+                            if mob.Name == "Bandit" and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                                local mobPart = mob:FindFirstChild("HumanoidRootPart")
+                                if mobPart then
+                                    local dist = (HumanoidRootPart.Position - mobPart.Position).Magnitude
+                                    if dist < shortestDistance then
+                                        shortestDistance = dist
+                                        targetMob = mobPart
+                                    end
                                 end
                             end
                         end
                     end
                     
                     if targetMob then
-                        tweenTo(targetMob.CFrame + Vector3.new(0, 10, 0), 350)
+                        -- Vai para cima do Bandido flutuando ligeiramente acima e ataca
+                        tweenTo(targetMob.CFrame + Vector3.new(0, 8, 0), 350)
                         attackTarget()
                     else
-                        tweenTo(SETTINGS.MobPosition + Vector3.new(0, 25, 0), 300)
+                        -- Se não achar nenhum Bandit vivo, vai para o local de spawn padrão
+                        tweenTo(SETTINGS.MobSpawn + Vector3.new(0, 20, 0), 300)
                     end
                 end
             else
