@@ -1,80 +1,239 @@
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+--[[
+    Project: Blox Fruits Sea 1 Modular Hub (Delta Executor)
+    Author / Repository Host: github.com/idiothamgurger/bloxfruits/
+    Target: Levels 1 to 700 + Boss Farm + UI Draggable + Bézier Motor
+]]
 
--- Evita duplicação de instâncias anteriores
-if PlayerGui:FindFirstChild("TaskScannerUI") then
-    PlayerGui.TaskScannerUI:Destroy()
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- [ SERVICES & VARIABLES ]
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+-- [ CONFIGURAÇÕES DO SCRIPT ]
+getgenv().Config = {
+    AutoFarmLevel = false,
+    AutoBoss = false,
+    SelectedBoss = "Gorilla King",
+    AutoSkills = false,
+    AutoEquipWeapon = true,
+    FruitSniper = false,
+    ServerHop = false,
+    TweenSpeed = 300
+}
+
+-- Tabela de Ilhas e Níveis do Sea 1
+local IslandsData = {
+    {Level = 1, Name = "Pirate / Marine Starter", CFrame = CFrame.new(979, 16, 1421), Mob = "Bandit", QuestName = "BanditQuest1"},
+    {Level = 10, Name = "Jungle", CFrame = CFrame.new(-1249, 12, 327), Mob = "Monkey", QuestName = "JungleQuest"},
+    {Level = 30, Name = "Pirate Village", CFrame = CFrame.new(-1140, 4, 3827), Mob = "Pirate", QuestName = "PirateVillageQuest"},
+    {Level = 60, Name = "Desert", CFrame = CFrame.new(895, 7, 4388), Mob = "Desert Bandit", QuestName = "DesertQuest"},
+    {Level = 75, Name = "Snow Mountain", CFrame = CFrame.new(1348, 105, -1313), Mob = "Snow Bandit", QuestName = "SnowQuest"},
+    {Level = 90, Name = "Marine Fortress", CFrame = CFrame.new(-4884, 21, 4323), Mob = "Chief Petty Officer", QuestName = "MarineQuest2"},
+    {Level = 120, Name = "Skypiea", CFrame = CFrame.new(-4721, 845, -1955), Mob = "Sky Bandit", QuestName = "SkyQuest"},
+    {Level = 190, Name = "Prison", CFrame = CFrame.new(4875, 5, 734), Mob = "Prisoner", QuestName = "PrisonerQuest"},
+    {Level = 275, Name = "Colosseum", CFrame = CFrame.new(-1580, 7.3, -2990), Mob = "Toga Warrior", QuestName = "ColosseumQuest"},
+    {Level = 300, Name = "Magma Village", CFrame = CFrame.new(-5316, 12, 8515), Mob = "Military Soldier", QuestName = "MagmaQuest"},
+    {Level = 375, Name = "Underwater City", CFrame = CFrame.new(6112, 6, -159), Mob = "Fishman Warrior", QuestName = "FishmanQuest"},
+    {Level = 450, Name = "Fountain City", CFrame = CFrame.new(5129, 60, 4048), Mob = "Galley Pirate", QuestName = "FountainQuest"}
+}
+
+-- Tabela de Chefes do Sea 1
+local BossesData = {
+    ["Gorilla King"] = {CFrame = CFrame.new(-1134, 15, -45), LevelReq = 20},
+    ["Bobby"] = {CFrame = CFrame.new(-1145, 14, 4350), LevelReq = 55},
+    ["Yeti"] = {CFrame = CFrame.new(1185, 137, -1535), LevelReq = 90},
+    ["Mob Leader"] = {CFrame = CFrame.new(-2855, 6, 5354), LevelReq = 120},
+    ["Vice Admiral"] = {CFrame = CFrame.new(-5035, 23, 4330), LevelReq = 130},
+    ["Thunder God"] = {CFrame = CFrame.new(-7861, 5543, -381), LevelReq = 190},
+    ["Warden"] = {CFrame = CFrame.new(5135, 3, 755), LevelReq = 220},
+    ["Chief Warden"] = {CFrame = CFrame.new(1814, 8, 120), LevelReq = 230},
+    ["Swan"] = {CFrame = CFrame.new(5230, 4, 755), LevelReq = 240},
+    ["Magma Admiral"] = {CFrame = CFrame.new(-5812, 18, 8826), LevelReq = 350},
+    ["Fishman Lord"] = {CFrame = CFrame.new(3864, 7, -1862), LevelReq = 450},
+    ["Cyborg"] = {CFrame = CFrame.new(6050, 20, 3885), LevelReq = 525},
+    ["Ice Admiral"] = {CFrame = CFrame.new(5812, 18, 3826), LevelReq = 700}
+}
+
+-- [ MOTOR DE MOVIMENTAÇÃO (TWEEN / BEZIER) ]
+local function FloatTo(targetCFrame)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    
+    local distance = (hrp.Position - targetCFrame.Position).Magnitude
+    local speed = getgenv().Config.TweenSpeed
+    local time = distance / speed
+    
+    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame + Vector3.new(0, 25, 0)})
+    
+    getgenv().CurrentTween = tween
+    tween:Play()
+    
+    -- Ativa noclip durante o tween
+    local noclipConnection
+    noclipConnection = RunService.Stepped:Connect(function()
+        if char:FindFirstChild("Humanoid") then
+            char.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+            for _, v in pairs(char:GetDescendants()) do
+                if v:IsA("BasePart") then v.CanCollide = false end
+            end
+        end
+    end)
+    
+    tween.Completed:Wait()
+    if noclipConnection then noclipConnection:Disconnect() end
 end
 
--- ==========================================
--- 1. MOTOR DE VARREDURA AVANÇADO (DATA CHECKER)
--- ==========================================
-local function scanPlayerProgress()
-    -- Tenta acessar a pasta de dados do jogador comum no Blox Fruits
-    local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("leaderstats")
-    
-    local function hasItemOrStat(itemName)
-        -- 1. Checa no Backpack ou Character (Armas, Frutas físicas)
-        if LocalPlayer.Backpack:FindFirstChild(itemName) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(itemName)) then
-            return true
+-- [ AUTO EQUIP WEAPON ]
+local function EquipWeapon()
+    if not getgenv().Config.AutoEquipWeapon then return end
+    for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and (tool.ToolTip == "Blox Fruit" or tool.ToolTip == "Melee" or tool.ToolTip == "Sword") then
+            LocalPlayer.Character.Humanoid:EquipTool(tool)
+            break
         end
-        
-        -- 2. Checa em valores salvos de inventário se existirem na pasta Data
-        if dataFolder then
-            local inv = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Items")
-            if inv and inv:FindFirstChild(itemName) then
-                return true
-            end
-            
-            -- Checa atributos diretos (ex: Estilos de luta salvos como valores booleanos ou strings)
-            for _, child in ipairs(dataFolder:GetChildren()) do
-                if child.Name:lower() == itemName:lower() or (child:IsA("ValueBase") and tostring(child.Value):lower() == itemName:lower()) then
-                    return true
+    end
+end
+
+-- [ AUTO SKILLS ]
+local function UseSkills()
+    if not getgenv().Config.AutoSkills then return end
+    local vim = game:GetService("VirtualInputManager")
+    local keys = {"Z", "X", "C", "V"}
+    for _, key in ipairs(keys) do
+        vim:SendKeyEvent(true, Enum.KeyCode[key], false, game)
+        task.wait(0.1)
+        vim:SendKeyEvent(false, Enum.KeyCode[key], false, game)
+    end
+end
+
+-- [ OBTIDOR DE MISSÃO ATUAL ]
+local function GetCurrentQuest()
+    local level = LocalPlayer.Data.Level.Value
+    local bestQuest = IslandsData[1]
+    for _, data in ipairs(IslandsData) do
+        if level >= data.Level then
+            bestQuest = data
+        end
+    end
+    return bestQuest
+end
+
+-- [ LOOP DE AUTO FARM LEVEL ]
+task.spawn(function()
+    while task.wait(0.5) do
+        pcall(function()
+            if getgenv().Config.AutoFarmLevel and not getgenv().Config.AutoBoss then
+                local questData = GetCurrentQuest()
+                local questTitle = LocalPlayer.PlayerGui.Main.Quest.Visible
+                
+                if not questTitle then
+                    -- Vai até o NPC de missão
+                    FloatTo(questData.CFrame)
+                    -- Simula clique/interação (Proximidade)
+                    task.wait(0.5)
+                else
+                    -- Procura o Mob correspondente
+                    local mobFolder = workspace.Enemies:GetChildren()
+                    for _, mob in ipairs(mobFolder) do
+                        if mob.Name:find(questData.Mob) and mob:FindFirstChild("HumanoidRootPart") and mob.Humanoid.Health > 0 then
+                            repeat
+                                task.wait()
+                                EquipWeapon()
+                                FloatTo(mob.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0))
+                                mob.HumanoidRootPart.Size = Vector3.new(60, 60, 60)
+                                mob.HumanoidRootPart.CanCollide = false
+                                UseSkills()
+                            until not getgenv().Config.AutoFarmLevel or not mob.Parent or mob.Humanoid.Health <= 0
+                        end
+                    end
                 end
             end
-        end
-        
-        return false
+        end)
     end
+end)
 
-    -- Base de verificação adaptada para o jogo
-    local tasksToCheck = {
-        { name = "Saber", category = "Armas", completed = hasItemOrStat("Saber") },
-        { name = "Electro", category = "Fighting Styles", completed = hasItemOrStat("Electro") },
-        { name = "Water Kung Fu", category = "Fighting Styles", completed = hasItemOrStat("Water Kung Fu") },
-        { name = "Black Leg", category = "Fighting Styles", completed = hasItemOrStat("Black Leg") },
-        { name = "Observation", category = "Hability", completed = hasItemOrStat("Observation") or hasItemOrStat("Ken") },
-        { name = "Buso", category = "Hability", completed = hasItemOrStat("Buso") or hasItemOrStat("Armament") },
-        { name = "Level 700 (Sea 2 Ready)", category = "Level", completed = (dataFolder and dataFolder:FindFirstChild("Level") and dataFolder.Level.Value >= 700) or false },
-    }
-
-    local missingTasks = {}
-    for _, task in ipairs(tasksToCheck) do
-        if not task.completed then
-            table.insert(missingTasks, task)
-        end
+-- [ LOOP DE AUTO BOSS ]
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            if getgenv().Config.AutoBoss then
+                local bossName = getgenv().Config.SelectedBoss
+                local bossInfo = BossesData[bossName]
+                
+                if bossInfo then
+                    local bossFound = nil
+                    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+                        if enemy.Name == bossName and enemy:FindFirstChild("HumanoidRootPart") and enemy.Humanoid.Health > 0 then
+                            bossFound = enemy
+                            break
+                        end
+                    end
+                    
+                    if bossFound then
+                        repeat
+                            task.wait()
+                            EquipWeapon()
+                            FloatTo(bossFound.HumanoidRootPart.CFrame * CFrame.new(0, 15, 5))
+                            bossFound.HumanoidRootPart.Size = Vector3.new(80, 80, 80)
+                            UseSkills()
+                        until not getgenv().Config.AutoBoss or not bossFound.Parent or bossFound.Humanoid.Health <= 0
+                    else
+                        -- Se o boss não estiver no mapa, viaja até a posição padrão dele para aguardar o spawn
+                        FloatTo(bossInfo.CFrame)
+                    end
+                end
+            end
+        end)
     end
+end)
 
-    return missingTasks
-end
+-- [ FRUIT SNIPER / COLETA ]
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            if getgenv().Config.FruitSniper then
+                for _, v in pairs(workspace:GetChildren()) do
+                    if v:IsA("Tool") and v:FindFirstChild("Handle") then
+                        FloatTo(v.Handle.CFrame)
+                    end
+                end
+            end
+        end)
+    end
+end)
 
-local missingItems = scanPlayerProgress()
-
--- ==========================================
--- 2. CRIAÇÃO DA INTERFACE GRÁFICA (UI)
--- ==========================================
+-- [ INTERFACE GRÁFICA FLUTUANTE ARRASTÁVEL (DRAGGABLE UI) ]
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TaskScannerUI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = PlayerGui
+ScreenGui.Name = "BloxFruitsSea1Hub"
+ScreenGui.Parent = CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 360, 0, 420)
-MainFrame.Position = UDim2.new(0.5, -180, 0.5, -210)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-MainFrame.BorderSizePixel = 0
+MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.Position = UDim2.new(0.15, 0, 0.15, 0)
+MainFrame.Size = UDim2.new(0, 480, 0, 360)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true -- Torna a janela inteira arrastável
 
 local UICorner = Instance.new("UICorner")
 UICorner.CornerRadius = UDim.new(0, 8)
@@ -82,98 +241,100 @@ UICorner.Parent = MainFrame
 
 -- Título
 local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
 Title.Size = UDim2.new(1, 0, 0, 45)
-Title.BackgroundTransparency = 1
-Title.Text = "⚙️ Motor de Pendências & Toggles"
+Title.Font = Enum.Font.GothamBold
+Title.Text = "  ROBYNHOFUT | Sea 1 Master Hub (Delta)"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 16
-Title.Font = Enum.Font.SourceSansBold
-Title.Parent = MainFrame
+Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- ScrollingFrame
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = Title
+
+-- Container de Botões (ScrollingFrame)
 local ScrollingFrame = Instance.new("ScrollingFrame")
-ScrollingFrame.Size = UDim2.new(1, -20, 1, -60)
-ScrollingFrame.Position = UDim2.new(0, 10, 0, 50)
-ScrollingFrame.BackgroundTransparency = 1
-ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, #missingItems * 55)
-ScrollingFrame.ScrollBarThickness = 6
 ScrollingFrame.Parent = MainFrame
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.Position = UDim2.new(0, 10, 0, 55)
+ScrollingFrame.Size = UDim2.new(1, -20, 1, -65)
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 2, 0)
+ScrollingFrame.ScrollBarThickness = 6
 
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 8)
 UIListLayout.Parent = ScrollingFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
 
--- ==========================================
--- 3. POPULAÇÃO DOS ITENS E ESTADOS ON/OFF
--- ==========================================
-getgenv().TaskStates = getgenv().TaskStates or {}
-
-if #missingItems == 0 then
-    -- Caso o jogador já tenha tudo da lista de checagem
-    local EmptyLabel = Instance.new("TextLabel")
-    EmptyLabel.Size = UDim2.new(1, 0, 0, 50)
-    EmptyLabel.BackgroundTransparency = 1
-    EmptyLabel.Text = "🎉 Nenhuma pendência encontrada! Tudo concluído."
-    EmptyLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    EmptyLabel.TextSize = 14
-    EmptyLabel.Font = Enum.Font.SourceSansBold
-    EmptyLabel.Parent = ScrollingFrame
-else
-    for _, task in ipairs(missingItems) do
-        local ItemFrame = Instance.new("Frame")
-        ItemFrame.Size = UDim2.new(1, 0, 0, 45)
-        ItemFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-        ItemFrame.BorderSizePixel = 0
-        ItemFrame.Parent = ScrollingFrame
-
-        local ItemCorner = Instance.new("UICorner")
-        ItemCorner.CornerRadius = UDim.new(0, 6)
-        ItemCorner.Parent = ItemFrame
-
-        local TaskLabel = Instance.new("TextLabel")
-        TaskLabel.Size = UDim2.new(0.65, 0, 1, 0)
-        TaskLabel.Position = UDim2.new(0, 12, 0, 0)
-        TaskLabel.BackgroundTransparency = 1
-        TaskLabel.Text = task.name .. "\n[" .. task.category .. "]"
-        TaskLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
-        TaskLabel.TextSize = 13
-        TaskLabel.TextXAlignment = Enum.TextXAlignment.Left
-        TaskLabel.Font = Enum.Font.SourceSans
-        TaskLabel.Parent = ItemFrame
-
-        -- Botão Toggle On/Off
-        local ToggleBtn = Instance.new("TextButton")
-        ToggleBtn.Size = UDim2.new(0, 70, 0, 28)
-        ToggleBtn.Position = UDim2.new(1, -80, 0.5, -14)
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        ToggleBtn.Text = "OFF"
-        ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        ToggleBtn.TextSize = 13
-        ToggleBtn.Font = Enum.Font.SourceSansBold
-        ToggleBtn.Parent = ItemFrame
-
-        local ToggleCorner = Instance.new("UICorner")
-        ToggleCorner.CornerRadius = UDim.new(0, 4)
-        ToggleCorner.Parent = ToggleBtn
-
-        -- Estado padrão
-        getgenv().TaskStates[task.name] = false
-
-        ToggleBtn.MouseButton1Click:Connect(function()
-            local currentState = getgenv().TaskStates[task.name]
-            currentState = not currentState
-            getgenv().TaskStates[task.name] = currentState
-
-            if currentState then
-                ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-                ToggleBtn.Text = "ON"
-            else
-                ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-                ToggleBtn.Text = "OFF"
-            end
-        end)
-    end
+-- Função criadora de Botões Toggle
+local function CreateToggle(name, default, callback)
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Parent = ScrollingFrame
+    ToggleBtn.BackgroundColor3 = default and Color3.fromRGB(40, 160, 80) or Color3.fromRGB(50, 50, 65)
+    ToggleBtn.Size = UDim2.new(1, 0, 0, 40)
+    ToggleBtn.Font = Enum.Font.GothamSemibold
+    ToggleBtn.Text = name .. ": " .. (default and "ON" or "OFF")
+    ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleBtn.TextSize = 14
+    
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 6)
+    Corner.Parent = ToggleBtn
+    
+    ToggleBtn.MouseButton1Click:Connect(function()
+        default = not default
+        ToggleBtn.BackgroundColor3 = default and Color3.fromRGB(40, 160, 80) or Color3.fromRGB(50, 50, 65)
+        ToggleBtn.Text = name .. ": " .. (default and "ON" or "OFF")
+        callback(default)
+    end)
 end
 
-print("[Scanner] Varredura concluída. Painel pronto.")
+-- Criando Toggles na UI
+CreateToggle("Auto Farm Level (1-700)", false, function(v)
+    getgenv().Config.AutoFarmLevel = v
+end)
+
+CreateToggle("Auto Boss", false, function(v)
+    getgenv().Config.AutoBoss = v
+end)
+
+CreateToggle("Auto Skills (Z X C V)", false, function(v)
+    getgenv().Config.AutoSkills = v
+end)
+
+CreateToggle("Fruit Sniper", false, function(v)
+    getgenv().Config.FruitSniper = v
+end)
+
+CreateToggle("Auto Equip Weapon", true, function(v)
+    getgenv().Config.AutoEquipWeapon = v
+end)
+
+-- Seletor de Boss (Dropdown Simplificado por Botão de Ciclo)
+local BossButton = Instance.new("TextButton")
+BossButton.Parent = ScrollingFrame
+BossButton.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+BossButton.Size = UDim2.new(1, 0, 0, 40)
+BossButton.Font = Enum.Font.GothamSemibold
+BossButton.Text = "Boss Alvo: " .. getgenv().Config.SelectedBoss
+BossButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+BossButton.TextSize = 14
+
+local BossCorner = Instance.new("UICorner")
+BossCorner.CornerRadius = UDim.new(0, 6)
+BossCorner.Parent = BossButton
+
+local bossKeys = {}
+for k, _ in pairs(BossesData) do table.insert(bossKeys, k) end
+local currentBossIndex = 1
+
+BossButton.MouseButton1Click:Connect(function()
+    currentBossIndex = currentBossIndex + 1
+    if currentBossIndex > #bossKeys then currentBossIndex = 1 end
+    getgenv().Config.SelectedBoss = bossKeys[currentBossIndex]
+    BossButton.Text = "Boss Alvo: " .. getgenv().Config.SelectedBoss
+end)
+
+print("Robynhofut Sea 1 Hub Carregado com Sucesso!")
