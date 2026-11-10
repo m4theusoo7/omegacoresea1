@@ -1,5 +1,5 @@
 -- Hub de Auto-Farm Blox Fruits (Sea 1: Level 1 ao 700)
--- Otimizado para Delta Executor
+-- Otimizado para Delta Executor (Com Correção de Antigravidade)
 
 local player = game.Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
@@ -9,7 +9,7 @@ local VirtualUser = game:GetService("VirtualUser")
 local getgenv = getgenv or function() return _G end
 getgenv().AutoFarm = false
 
--- Tabela de Progressão do Sea 1 (Expansível)
+-- Tabela de Progressão do Sea 1
 local QuestList = {
     {Min = 1, Max = 9, QuestName = "BanditQuest1", QuestLevel = 1, Mob = "Bandit", NpcName = "Bandit Quest Giver", NpcPos = CFrame.new(1059, 16, 1549)},
     {Min = 10, Max = 14, QuestName = "JungleQuest", QuestLevel = 1, Mob = "Monkey", NpcName = "Adventurer", NpcPos = CFrame.new(-1598, 37, 153)},
@@ -38,7 +38,6 @@ local QuestList = {
     {Min = 700, Max = 700, QuestName = "FountainQuest", QuestLevel = 2, Mob = "Galley Captain", NpcName = "Galleon", NpcPos = CFrame.new(5259, 38, 4050)}
 }
 
--- Função para identificar a quest atual com base no nível do jogador
 local function GetCurrentQuest()
     local level = player.Data.Level.Value
     for _, quest in pairs(QuestList) do
@@ -49,7 +48,7 @@ local function GetCurrentQuest()
     return nil
 end
 
--- Sistema de Noclip para atravessar objetos durante o voo
+-- Bypass de Colisão (Noclip)
 RunService.Stepped:Connect(function()
     if getgenv().AutoFarm and player.Character then
         for _, v in pairs(player.Character:GetDescendants()) do
@@ -60,19 +59,42 @@ RunService.Stepped:Connect(function()
     end
 end)
 
+-- Sistema de Antigravidade (Prevenção de Queda na Água)
+task.spawn(function()
+    while task.wait() do
+        if getgenv().AutoFarm and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            if not hrp:FindFirstChild("AntiGravity") then
+                local bv = Instance.new("BodyVelocity")
+                bv.Name = "AntiGravity"
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bv.Velocity = Vector3.new(0, 0, 0)
+                bv.Parent = hrp
+            end
+        else
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                if hrp:FindFirstChild("AntiGravity") then
+                    hrp.AntiGravity:Destroy()
+                end
+            end
+        end
+    end
+end)
+
 -- Movimentação Suave (Tween)
 local function TweenTo(targetCFrame)
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = player.Character.HumanoidRootPart
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300 -- Ajuste a velocidade para evitar kicks do anti-cheat
+    local speed = 300 
     local tweenInfo = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
     local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
     tween.Completed:Wait()
 end
 
--- Pegar Missão via Remote
+-- Pegar Missão
 local function PegarMissao(questTarget)
     local args = {
         [1] = "StartQuest",
@@ -92,22 +114,19 @@ local function EquipWeapon()
     end
 end
 
--- Loop Principal de Farm
+-- Loop Principal
 task.spawn(function()
     while task.wait() do
         if getgenv().AutoFarm then
             pcall(function()
                 local questInfo = GetCurrentQuest()
                 if questInfo then
-                    -- Verifica se já possui a missão ativa
                     local temQuest = player.PlayerGui.Main.Quest.Visible
                     if not temQuest then
-                        -- Vai até o NPC e pega a missão
                         TweenTo(questInfo.NpcPos)
                         task.wait(0.5)
                         PegarMissao(questInfo)
                     else
-                        -- Procura e ataca o Mob
                         local targetMob = nil
                         for _, mob in pairs(workspace.Enemies:GetChildren()) do
                             if mob.Name == questInfo.Mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
@@ -150,9 +169,9 @@ ToggleButton.Text = "FARM\nOFF"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
 ToggleButton.TextSize = 14
 ToggleButton.Active = true
-ToggleButton.Draggable = true -- Permite arrastar na tela
+ToggleButton.Draggable = true 
 
-UICorner.CornerRadius = UDim.new(1, 0) -- Botão redondo
+UICorner.CornerRadius = UDim.new(1, 0)
 UICorner.Parent = ToggleButton
 
 ToggleButton.MouseButton1Click:Connect(function()
