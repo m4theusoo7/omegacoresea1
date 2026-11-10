@@ -1,24 +1,17 @@
--- Serviços e Variáveis
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Coordenada exata do NPC + um pequeno afastamento em altura e profundidade para não prender
--- Coordenada base: (1062, 16, 1546) -> Adicionamos +5 no Y (altura) ou ajustamos o posicionamento final
-local PirateStarterQuestNPC = CFrame.new(1062, 20, 1546) 
+-- Coordenada exata do NPC na Pirate Starter
+local PirateStarterQuestNPC = CFrame.new(1062, 16, 1546)
 
 local function tweenTo(targetCFrame)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = LocalPlayer.Character.HumanoidRootPart
     
-    -- Garante que o personagem não está ancorado antes de iniciar o movimento
-    if LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.PlatformStand = false
-    end
-    
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300 -- Velocidade estável
+    local speed = 350
     local timeTake = distance / speed
     
     local tweenInfo = TweenInfo.new(timeTake, Enum.EasingStyle.Linear)
@@ -28,36 +21,33 @@ local function tweenTo(targetCFrame)
     tween.Completed:Wait()
 end
 
--- Função para verificar, pegar a missão e destravar o avatar
 local function getPirateStarterQuestSafely()
     local success, err = pcall(function()
         if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Data") then return end
         local playerLevel = LocalPlayer.Data.Level.Value
         
-        -- Apenas para o Sea 1 / Níveis abaixo de 10
         if playerLevel < 10 then
             local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
             
             if not questActive then
-                print("[OmegaCore]: Movendo para o NPC (Modo Anti-Trava)...")
+                -- 1. Vai até o NPC
                 tweenTo(PirateStarterQuestNPC)
+                task.wait(0.2)
                 
-                task.wait(0.3)
-                
-                -- Dispara o Remote para aceitar a missão dos Bandits
+                -- 2. Aceita a missão via Remote
                 if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
                     ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
-                    print("[OmegaCore]: Missão aceita! Destravando posição...")
                 end
                 
-                -- MOVIMENTO DE ESCAPE: Dá um pequeno empurrão para a frente (frente do NPC)
+                -- 3. ANTI-PUXÃO: Joga o personagem instantaneamente para fora da área de colisão do NPC
                 if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local hrp = LocalPlayer.Character.HumanoidRootPart
-                    -- Move o personagem 10 studs para frente e um pouco para cima para evitar colisões
-                    hrp.CFrame = hrp.CFrame + Vector3.new(0, 5, -10)
+                    -- Afasta o avatar 12 studs para trás e 4 para cima, quebrando o puxão do NPC
+                    hrp.CFrame = PirateStarterQuestNPC * CFrame.new(0, 4, 12)
                 end
                 
-                task.wait(0.5) -- Pequena pausa para estabilizar a física antes de iniciar o farm de mobs
+                -- 4. Pequena pausa de estabilização da física
+                task.wait(0.4)
             end
         end
     end)
@@ -67,7 +57,7 @@ local function getPirateStarterQuestSafely()
     end
 end
 
--- Loop de execução contínua
+-- Loop de verificação
 task.spawn(function()
     while task.wait(1) do
         getPirateStarterQuestSafely()
