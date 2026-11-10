@@ -1,11 +1,13 @@
+-- Configurações e Serviços
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Coordenada exata do NPC na Pirate Starter
-local PirateStarterQuestNPC = CFrame.new(1062, 16, 1546)
+-- Coordenada exata do NPC de Missão na Pirate Starter Island
+local PirateStarterQuestNPC = CFrame.new(1062, 16, 1546) 
 
+-- Função de Tween para mover o personagem até o NPC com segurança
 local function tweenTo(targetCFrame)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local hrp = LocalPlayer.Character.HumanoidRootPart
@@ -21,45 +23,34 @@ local function tweenTo(targetCFrame)
     tween.Completed:Wait()
 end
 
-local function getPirateStarterQuestSafely()
-    local success, err = pcall(function()
-        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Data") then return end
+-- Executa uma única vez para pegar a missão e parar
+task.spawn(function()
+    pcall(function()
+        -- Aguarda o personagem carregar completamente no jogo
+        repeat task.wait(1) until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Data")
+        
         local playerLevel = LocalPlayer.Data.Level.Value
         
+        -- Verifica se está na faixa de nível da Pirate Starter
         if playerLevel < 10 then
             local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
             
             if not questActive then
-                -- 1. Vai até o NPC
+                print("[OmegaCore]: Indo pegar a missão na Pirate Starter...")
                 tweenTo(PirateStarterQuestNPC)
-                task.wait(0.2)
                 
-                -- 2. Aceita a missão via Remote
+                task.wait(0.5)
+                
+                -- Dispara o evento remoto para aceitar a missão dos Bandits
                 if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
                     ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
+                    print("[OmegaCore]: Missão aceita com sucesso! Script finalizado.")
                 end
-                
-                -- 3. ANTI-PUXÃO: Joga o personagem instantaneamente para fora da área de colisão do NPC
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local hrp = LocalPlayer.Character.HumanoidRootPart
-                    -- Afasta o avatar 12 studs para trás e 4 para cima, quebrando o puxão do NPC
-                    hrp.CFrame = PirateStarterQuestNPC * CFrame.new(0, 4, 12)
-                end
-                
-                -- 4. Pequena pausa de estabilização da física
-                task.wait(0.4)
+            else
+                print("[OmegaCore]: Você já tem uma missão ativa.")
             end
+        else
+            print("[OmegaCore]: Nível 10 ou superior. Nenhuma ação necessária.")
         end
     end)
-    
-    if not success then
-        warn("[OmegaCore Error]: " .. tostring(err))
-    end
-end
-
--- Loop de verificação
-task.spawn(function()
-    while task.wait(1) do
-        getPirateStarterQuestSafely()
-    end
 end)
