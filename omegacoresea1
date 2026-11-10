@@ -1,236 +1,119 @@
 --[[
-    OmegaCore Hub - Blox Fruits Sea 1 (Lv. 1 - 700)
+    Blox Fruits - Auto Farm Level 1 to 10 (Starter -> Jungle)
     Otimizado para Delta Executor
 ]]
 
-if not game:IsLoaded() then game.Loaded:Wait() end
-
--- Serviços Principais
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local VirtualUser = game:GetService("VirtualUser")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Anti-AFK
-LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Configurações de Estado
-getgenv().Config = {
-    AutoFarmLevel = false,
-    AutoSkills = false,
-    AutoStatMelee = false,
-    AutoStatDefense = false,
-    AutoStatSword = false,
-    FastAttack = true,
-    NoClip = true,
-    TweenSpeed = 350
+-- Configurações de Ilhas e Alvos
+local SETTINGS = {
+    StarterLevelMax = 10,
+    StarterIsland = CFrame.new(979.8, 16.5, 1419.2), -- Posição aproximada Starter Island
+    JungleIsland = CFrame.new(-1251.1, 11.8, 3812.3), -- Posição aproximada Jungle
 }
 
--- Mapeamento de Missões do Sea 1 (Level, NpcName, QuestName, MobName, CFrame de Entrega)
-local Sea1Quests = {
-    {1, 10, "BanditQuest1", "Bandit", CFrame.new(1059, 16, 1549)},
-    {10, 30, "JungleQuest", "Monkey", CFrame.new(-1598, 36, 153)},
-    {30, 60, "JungleQuest", "Gorilla", CFrame.new(-1598, 36, 153)},
-    {60, 90, "BuggyQuest1", "Pirate", CFrame.new(-1140, 4, 3827)},
-    {90, 120, "BuggyQuest1", "Brute", CFrame.new(-1140, 4, 3827)},
-    {120, 150, "DesertQuest", "Desert Bandit", CFrame.new(896, 6, 4388)},
-    {150, 190, "DesertQuest", "Desert Officer", CFrame.new(896, 6, 4388)},
-    {190, 210, "SnowQuest", "Snow Bandit", CFrame.new(1389, 87, -1298)},
-    {210, 250, "SnowQuest", "Snowman", CFrame.new(1389, 87, -1298)},
-    {250, 275, "MarineQuest", "Chief Petty Officer", CFrame.new(-5035, 20, 4325)},
-    {275, 300, "MarineQuest", "Navy Sergeant", CFrame.new(-5035, 20, 4325)},
-    {300, 325, "SkyQuest", "Skypiea Bandit", CFrame.new(-4721, 845, -1953)},
-    {325, 375, "SkyQuest", "Dark Master", CFrame.new(-4721, 845, -1953)},
-    {375, 400, "PrisonerQuest", "Prisoner", CFrame.new(5308, 2, 455)},
-    {400, 450, "PrisonerQuest", "Dangerous Prisoner", CFrame.new(5308, 2, 455)},
-    {450, 475, "ColosseumQuest", "Toga Warrior", CFrame.new(-1580, 7, -2983)},
-    {475, 525, "ColosseumQuest", "Gladiator", CFrame.new(-1580, 7, -2983)},
-    {525, 550, "MagmaQuest", "Military Soldier", CFrame.new(-5317, 12, 8515)},
-    {550, 700, "MagmaQuest", "Military Spy", CFrame.new(-5317, 12, 8515)}
-}
+-- Função para verificar o level atual
+local function getLevel()
+    local data = LocalPlayer:FindFirstChild("Data")
+    if data and data:FindFirstChild("Level") then
+        return data.Level.Value
+    end
+    return 1
+end
 
--- Função de Movimentação por Tween com Noclip
-local function TweenTo(targetCFrame)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = LocalPlayer.Character.HumanoidRootPart
-    local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = getgenv().Config.TweenSpeed
+-- Função de movimento suave (Tween)
+local function tweenTo(targetCFrame, speed)
+    speed = speed or 250
+    local distance = (HumanoidRootPart.Position - targetCFrame.Position).Magnitude
+    local time = distance / speed
     
-    local info = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, info, {CFrame = targetCFrame})
+    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, {CFrame = targetCFrame})
     
-    getgenv().Tweening = true
     tween:Play()
-    
-    local connection
-    connection = RunService.Stepped:Connect(function()
-        if getgenv().Config.NoClip and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-            for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.CanCollide = false
-                end
-            end
-        end
+    return tween
+end
+
+-- Função para usar Ataques e Skills
+local function attackTarget()
+    -- Simula clique de ataque básico
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.05)
+        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
     end)
     
-    tween.Completed:Wait()
-    connection:Disconnect()
-    getgenv().Tweening = false
-end
-
--- Pega a Missão Atual com base no Level
-local function GetCurrentQuest()
-    local myLevel = LocalPlayer.Data.Level.Value
-    for _, q in ipairs(Sea1Quests) do
-        if myLevel >= q[1] and myLevel < q[2] then
-            return q
-        end
+    -- Dispara skills (Z, X, C, V)
+    local vim = game:GetService("VirtualInputManager")
+    local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+    for _, key in ipairs(keys) do
+        vim:SendKeyEvent(true, key, false, game)
+        task.wait(0.05)
+        vim:SendKeyEvent(false, key, false, game)
     end
-    return Sea1Quests[1]
 end
 
--- Loop de Auto Farm Level
+-- Loop Principal de Execução
 task.spawn(function()
+    print("[OmegaCore]: Script de Inicialização Iniciado (Level 1-10 -> Jungle)")
+    
     while true do
         task.wait(0.5)
+        
         pcall(function()
-            if getgenv().Config.AutoFarmLevel then
-                local currentQuest = GetCurrentQuest()
-                local questData = LocalPlayer.PlayerGui.Main.Quest
+            local currentLevel = getLevel()
+            Character = LocalPlayer.Character
+            if not Character or not Character:FindFirstChild("HumanoidRootPart") then return end
+            HumanoidRootPart = Character.HumanoidRootPart
+            
+            if currentLevel < SETTINGS.StarterLevelMax then
+                -- FASE 1: Farm na Ilha Inicial (Marine/Pirate Starter)
+                -- Procura por Bandits/Office (Bandidos da ilha inicial)
+                local targetMob = nil
+                local shortestDistance = math.huge
                 
-                -- Verifica se já tem missão ativa
-                if not questData.Visible then
-                    -- Vai até o NPC da missão
-                    local npcPos = currentQuest[5] -- Posição aproximada do entregador/NPC
-                    TweenTo(npcPos + CFrame.new(0, 10, 0))
-                    
-                    -- Dispara o evento de pegar missão (Simulação de clique no NPC)
-                    for _, v in pairs(workspace.NPCs:GetChildren()) do
-                        if v:FindFirstChild("HumanoidRootPart") and (v.HumanoidRootPart.Position - npcPos.Position).Magnitude < 15 then
-                            pcall(function()
-                                fireclickdetector(v.ClickDetector)
-                            end)
-                        end
-                    end
-                else
-                    -- Procura pelos monstros da missão atual no workspace
-                    local targetName = currentQuest[4]
-                    local found = false
-                    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-                        if enemy.Name == targetName and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
-                            found = true
-                            while getgenv().Config.AutoFarmLevel and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") do
-                                task.wait()
-                                -- Posiciona em cima/atrás do mob para evitar dano direto
-                                TweenTo(enemy.HumanoidRootPart.CFrame * CFrame.new(0, 25, 3))
-                                
-                                -- Equipe arma/meele e ataca
-                                local tool = LocalPlayer.Backpack:FindFirstChildOfClass("Tool") or LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                                if tool and tool.Parent == LocalPlayer.Backpack then
-                                    tool.Parent = LocalPlayer.Character
-                                end
-                                
-                                VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                                
-                                -- Auto Habilidades (Z, X, C, V)
-                                if getgenv().Config.AutoSkills then
-                                    local vim = game:GetService("VirtualInputManager")
-                                    for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
-                                        vim:SendKeyEvent(true, key, false, game)
-                                        task.wait(0.05)
-                                        vim:SendKeyEvent(false, key, false, game)
-                                    end
-                                end
+                for _, mob in pairs(workspace.Enemies:GetChildren()) do
+                    if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                        local mobPart = mob:FindFirstChild("HumanoidRootPart")
+                        if mobPart then
+                            local dist = (HumanoidRootPart.Position - mobPart.Position).Magnitude
+                            if dist < shortestDistance then
+                                shortestDistance = dist
+                                targetMob = mobPart
                             end
                         end
                     end
-                    if not found then
-                        task.wait(1)
-                    end
                 end
+                
+                if targetMob then
+                    -- Vai até o mob mantendo uma pequena altura para evitar colisões
+                    local destination = targetMob.CFrame + Vector3.new(0, 10, 0)
+                    tweenTo(destination, 300)
+                    attackTarget()
+                else
+                    -- Caso não ache mobs, paira sobre a ilha inicial
+                    tweenTo(SETTINGS.StarterIsland + Vector3.new(0, 25, 0), 250)
+                end
+                
+            else
+                -- FASE 2: Atingiu o Level 10 - Viagem para a Ilha Jungle
+                print("[OmegaCore]: Level 10 atingido! Navegando para a Ilha Jungle...")
+                
+                -- Executa o voo de transição para a Jungle
+                local tweenJungle = tweenTo(SETTINGS.JungleIsland + Vector3.new(0, 50, 0), 350)
+                tweenJungle.Completed:Wait()
+                
+                print("[OmegaCore]: Chegou na Ilha Jungle. Pronto para o próximo estágio de farm!")
+                script:Destroy() -- Encerra este script específico de transição inicial
             end
         end)
     end
 end)
-
--- Interface Gráfica Simples (UI Flutuante)
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local UICorner = Instance.new("UICorner")
-local Title = Instance.new("TextLabel")
-local ToggleFarm = Instance.new("TextButton")
-local ToggleSkills = Instance.new("TextButton")
-
-ScreenGui.Parent = game.CoreGui
-ScreenGui.Name = "OmegaCoreSea1"
-
-MainFrame.Name = "MainFrame"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
-MainFrame.Size = UDim2.new(0, 240, 0, 180)
-MainFrame.Active = true
-MainFrame.Draggable = true
-
-UICorner.Parent = MainFrame
-UICorner.CornerRadius = UDim.new(0, 8)
-
-Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-Title.Size = UDim2.new(0, 240, 0, 40)
-Title.Font = Enum.Font.GothamBold
-Title.Text = "OmegaCore | Sea 1"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 14
-
-ToggleFarm.Parent = MainFrame
-ToggleFarm.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-ToggleFarm.Position = UDim2.new(0.07, 0, 0.3, 0)
-ToggleFarm.Size = UDim2.new(0, 200, 0, 35)
-ToggleFarm.Font = Enum.Font.Gotham
-ToggleFarm.Text = "Auto Farm: OFF"
-ToggleFarm.TextColor3 = Color3.fromRGB(255, 100, 100)
-ToggleFarm.TextSize, ToggleFarm.AutoButtonColor = 13, true
-local corner1 = Instance.new("UICorner", ToggleFarm)
-corner1.CornerRadius = UDim.new(0, 6)
-
-ToggleSkills.Parent = MainFrame
-ToggleSkills.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-ToggleSkills.Position = UDim2.new(0.07, 0, 0.6, 0)
-ToggleSkills.Size = UDim2.new(0, 200, 0, 35)
-ToggleSkills.Font = Enum.Font.Gotham
-ToggleSkills.Text = "Auto Skills (Z X C V): OFF"
-ToggleSkills.TextColor3 = Color3.fromRGB(255, 100, 100)
-ToggleSkills.TextSize, ToggleSkills.AutoButtonColor = 13, true
-local corner2 = Instance.new("UICorner", ToggleSkills)
-corner2.CornerRadius = UDim.new(0, 6)
-
--- Eventos dos Botões
-ToggleFarm.MouseButton1Click:Connect(function()
-    getgenv().Config.AutoFarmLevel = not getgenv().Config.AutoFarmLevel
-    if getgenv().Config.AutoFarmLevel then
-        ToggleFarm.Text = "Auto Farm: ON"
-        ToggleFarm.TextColor3 = Color3.fromRGB(100, 255, 100)
-    else
-        ToggleFarm.Text = "Auto Farm: OFF"
-        ToggleFarm.TextColor3 = Color3.fromRGB(255, 100, 100)
-    end
-end)
-
-ToggleSkills.MouseButton1Click:Connect(function()
-    getgenv().Config.AutoSkills = not getgenv().Config.AutoSkills
-    if getgenv().Config.AutoSkills then
-        ToggleSkills.Text = "Auto Skills (Z X C V): ON"
-        ToggleSkills.TextColor3 = Color3.fromRGB(100, 255, 100)
-    else
-        ToggleSkills.Text = "Auto Skills (Z X C V): OFF"
-        ToggleSkills.TextColor3 = Color3.fromRGB(255, 100, 100)
-    end
-end)
-
-print("OmegaCore carregado com sucesso para o Sea 1!")
