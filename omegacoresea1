@@ -1,149 +1,202 @@
--- Hub de Auto-Farm Blox Fruits (Sea 1: Level 1 ao 700)
--- Otimizado para Delta Executor (Com Correção de Antigravidade)
+--[================================================================]--
+--  BLOZX FRUITS SMART ENGINE - LEVEL 1 TO 700 (FIRST SEA)
+--  Optimized for Delta Executor / Mobile Exploits
+--[================================================================]--
 
-local player = game.Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- Proteção contra execuções duplas
+getgenv().SmartEngineRunning = getgenv().SmartEngineRunning or false
+if getgenv().SmartEngineRunning then
+    warn("[SmartEngine]: O motor já está em execução!")
+    return
+end
+getgenv().SmartEngineRunning = true
+
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
 
-local getgenv = getgenv or function() return _G end
-getgenv().AutoFarm = false
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Tabela de Progressão do Sea 1
-local QuestList = {
-    {Min = 1, Max = 9, QuestName = "BanditQuest1", QuestLevel = 1, Mob = "Bandit", NpcName = "Bandit Quest Giver", NpcPos = CFrame.new(1059, 16, 1549)},
-    {Min = 10, Max = 14, QuestName = "JungleQuest", QuestLevel = 1, Mob = "Monkey", NpcName = "Adventurer", NpcPos = CFrame.new(-1598, 37, 153)},
-    {Min = 15, Max = 29, QuestName = "JungleQuest", QuestLevel = 2, Mob = "Gorilla", NpcName = "Adventurer", NpcPos = CFrame.new(-1598, 37, 153)},
-    {Min = 30, Max = 39, QuestName = "BuggyQuest1", QuestLevel = 1, Mob = "Pirate", NpcName = "Pirate", NpcPos = CFrame.new(-1140, 4, 3828)},
-    {Min = 40, Max = 59, QuestName = "BuggyQuest1", QuestLevel = 2, Mob = "Brute", NpcName = "Pirate", NpcPos = CFrame.new(-1140, 4, 3828)},
-    {Min = 60, Max = 74, QuestName = "DesertQuest", QuestLevel = 1, Mob = "Desert Bandit", NpcName = "Desert Adventurer", NpcPos = CFrame.new(896, 6, 4388)},
-    {Min = 75, Max = 89, QuestName = "DesertQuest", QuestLevel = 2, Mob = "Desert Officer", NpcName = "Desert Adventurer", NpcPos = CFrame.new(896, 6, 4388)},
-    {Min = 90, Max = 99, QuestName = "SnowQuest", QuestLevel = 1, Mob = "Snow Bandit", NpcName = "Villager", NpcPos = CFrame.new(1384, 87, -1297)},
-    {Min = 100, Max = 119, QuestName = "SnowQuest", QuestLevel = 2, Mob = "Snowman", NpcName = "Villager", NpcPos = CFrame.new(1384, 87, -1297)},
-    {Min = 120, Max = 149, QuestName = "MarineQuest2", QuestLevel = 1, Mob = "Chief Petty Officer", NpcName = "Marine", NpcPos = CFrame.new(-5036, 28, 4324)},
-    {Min = 150, Max = 174, QuestName = "SkyQuest", QuestLevel = 1, Mob = "Sky Bandit", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4841, 717, -2620)},
-    {Min = 175, Max = 189, QuestName = "SkyQuest", QuestLevel = 2, Mob = "Dark Master", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4841, 717, -2620)},
-    {Min = 190, Max = 209, QuestName = "PrisonerQuest", QuestLevel = 1, Mob = "Prisoner", NpcName = "Guard", NpcPos = CFrame.new(5308, 1, 474)},
-    {Min = 210, Max = 249, QuestName = "PrisonerQuest", QuestLevel = 2, Mob = "Dangerous Prisoner", NpcName = "Guard", NpcPos = CFrame.new(5308, 1, 474)},
-    {Min = 250, Max = 299, QuestName = "ColosseumQuest", QuestLevel = 1, Mob = "Toga Warrior", NpcName = "Gladiator", NpcPos = CFrame.new(-2246, 7, -2988)},
-    {Min = 300, Max = 324, QuestName = "MagmaQuest", QuestLevel = 1, Mob = "Military Soldier", NpcName = "Magma Ninja", NpcPos = CFrame.new(-5316, 12, 8514)},
-    {Min = 325, Max = 374, QuestName = "MagmaQuest", QuestLevel = 2, Mob = "Military Spy", NpcName = "Magma Ninja", NpcPos = CFrame.new(-5316, 12, 8514)},
-    {Min = 375, Max = 399, QuestName = "FishmanQuest", QuestLevel = 1, Mob = "Fishman Warrior", NpcName = "Fishman", NpcPos = CFrame.new(61122, 18, 1569)},
-    {Min = 400, Max = 449, QuestName = "FishmanQuest", QuestLevel = 2, Mob = "Fishman Commando", NpcName = "Fishman", NpcPos = CFrame.new(61122, 18, 1569)},
-    {Min = 450, Max = 474, QuestName = "SkyExp1Quest", QuestLevel = 1, Mob = "God's Guard", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4721, 845, -1954)},
-    {Min = 475, Max = 524, QuestName = "SkyExp1Quest", QuestLevel = 2, Mob = "Shanda", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4721, 845, -1954)},
-    {Min = 525, Max = 549, QuestName = "SkyExp2Quest", QuestLevel = 1, Mob = "Royal Squad", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-7904, 5635, -463)},
-    {Min = 550, Max = 624, QuestName = "SkyExp2Quest", QuestLevel = 2, Mob = "Royal Soldier", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-7904, 5635, -463)},
-    {Min = 625, Max = 699, QuestName = "FountainQuest", QuestLevel = 1, Mob = "Galley Pirate", NpcName = "Galleon", NpcPos = CFrame.new(5259, 38, 4050)},
-    {Min = 700, Max = 700, QuestName = "FountainQuest", QuestLevel = 2, Mob = "Galley Captain", NpcName = "Galleon", NpcPos = CFrame.new(5259, 38, 4050)}
+-- Configurações Globais do Motor
+local Config = {
+    AutoFarm = true,
+    AutoSkills = true,
+    AutoQuest = true,
+    AutoClick = true,
+    ServerHopLimit = 50,
+    TweenSpeed = 300, -- Velocidade ajustada para segurança no Delta
 }
 
-local function GetCurrentQuest()
-    local level = player.Data.Level.Value
-    for _, quest in pairs(QuestList) do
-        if level >= quest.Min and level <= quest.Max then
-            return quest
+-- Estado Atual do Motor (FSM)
+local EngineState = {
+    CurrentState = "IDLE", -- IDLE, GET_QUEST, FARMING, RETREAT
+    TargetNPC = nil,
+    TargetQuestData = nil,
+    LastJobHop = ""
+}
+
+-- Anti-AFK para evitar desconexão
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+-- Tabela de Missões do First Sea (Level 1 a 700)
+local QuestDatabase = {
+    {Min = 1, Max = 10, NPC = "Marine Recruit", QuestName = "MarineQuest", QuestIndex = 1, LevelReq = 1, Mob = "Marine", Pos = CFrame.new(-2708, 24, 2103)},
+    {Min = 10, Max = 30, NPC = "Bandit", QuestName = "BanditQuest1", QuestIndex = 1, LevelReq = 10, Mob = "Bandit", Pos = CFrame.new(1059, 16, 1549)},
+    {Min = 30, Max = 60, NPC = "Monkey", QuestName = "JungleQuest", QuestIndex = 1, LevelReq = 30, Mob = "Monkey", Pos = CFrame.new(-1598, 36, 153)},
+    {Min = 60, Max = 90, NPC = "Gorilla", QuestName = "JungleQuest", QuestIndex = 2, LevelReq = 60, Mob = "Gorilla", Pos = CFrame.new(-1242, 6, -502)},
+    {Min = 90, Max = 120, NPC = "Pirate", QuestName = "BuggyQuest1", QuestIndex = 1, LevelReq = 90, Mob = "Pirate", Pos = CFrame.new(-1140, 4, 3827)},
+    {Min = 120, Max = 150, NPC = "Brute", QuestName = "BuggyQuest1", QuestIndex = 2, LevelReq = 120, Mob = "Brute", Pos = CFrame.new(-1140, 15, 4355)},
+    {Min = 150, Max = 175, NPC = "Desert Bandit", QuestName = "DesertQuest", QuestIndex = 1, LevelReq = 150, Mob = "Desert Bandit", Pos = CFrame.new(896, 6, 4389)},
+    {Min = 175, Max = 190, NPC = "Desert Officer", QuestName = "DesertQuest", QuestIndex = 2, LevelReq = 175, Mob = "Desert Officer", Pos = CFrame.new(1573, 8, 4385)},
+    {Min = 190, Max = 210, NPC = "Snow Bandit", QuestName = "SnowQuest", QuestIndex = 1, LevelReq = 190, Mob = "Snow Bandit", Pos = CFrame.new(1389, 87, -1298)},
+    {Min = 210, Max = 250, NPC = "Snowman", QuestName = "SnowQuest", QuestIndex = 2, LevelReq = 210, Mob = "Snowman", Pos = CFrame.new(1321, 107, -1449)},
+    {Min = 250, Max = 300, NPC = "Chief Petty Officer", QuestName = "MarineQuest2", QuestIndex = 1, LevelReq = 250, Mob = "Chief Petty Officer", Pos = CFrame.new(-5039, 27, 4324)},
+    {Min = 300, Max = 325, NPC = "Sky Bandit", QuestName = "SkyQuest", QuestIndex = 1, LevelReq = 300, Mob = "Sky Bandit", Pos = CFrame.new(-4842, 718, -2623)},
+    {Min = 325, Max = 375, NPC = "Dark Master", QuestName = "SkyQuest", QuestIndex = 2, LevelReq = 325, Mob = "Dark Master", Pos = CFrame.new(-5271, 389, -2254)},
+    {Min = 375, Max = 400, NPC = "Prisoner", QuestName = "PrisonerQuest", QuestIndex = 1, LevelReq = 375, Mob = "Prisoner", Pos = CFrame.new(487, 47, 612)},
+    {Min = 400, Max = 450, NPC = "Dangerous Prisoner", QuestName = "PrisonerQuest", QuestIndex = 2, LevelReq = 400, Mob = "Dangerous Prisoner", Pos = CFrame.new(487, 47, 612)},
+    {Min = 450, Max = 475, NPC = "Toga Warrior", QuestName = "ColosseumQuest", QuestIndex = 1, LevelReq = 450, Mob = "Toga Warrior", Pos = CFrame.new(-1580, 7.5, -2985)},
+    {Min = 475, Max = 525, NPC = "Gladiator", QuestName = "ColosseumQuest", QuestIndex = 2, LevelReq = 475, Mob = "Gladiator", Pos = CFrame.new(-1390, 7.5, -3150)},
+    {Min = 525, Max = 550, NPC = "Military Soldier", QuestName = "MagmaQuest", QuestIndex = 1, LevelReq = 525, Mob = "Military Soldier", Pos = CFrame.new(-5315, 12, 8515)},
+    {Min = 550, Max = 625, NPC = "Military Spy", QuestName = "MagmaQuest", QuestIndex = 2, LevelReq = 550, Mob = "Military Spy", Pos = CFrame.new(-5809, 15, 8829)},
+    {Min = 625, Max = 700, NPC = "Fishman Warrior", QuestName = "FishmanQuest", QuestIndex = 1, LevelReq = 625, Mob = "Fishman Warrior", Pos = CFrame.new(61122, 18, 1569)}
+}
+
+local function GetCurrentLevel()
+    local stats = LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")
+    if stats then return stats.Value end
+    return 1
+end
+
+local function GetActiveQuest()
+    local questGui = PlayerGui:FindFirstChild("Quest")
+    if questGui and questGui.Visible then
+        local container = questGui:FindFirstChild("Container")
+        if container and container:FindFirstChild("QuestTitle") then
+            return container.QuestTitle.Text
         end
     end
     return nil
 end
 
--- Bypass de Colisão (Noclip)
-RunService.Stepped:Connect(function()
-    if getgenv().AutoFarm and player.Character then
-        for _, v in pairs(player.Character:GetDescendants()) do
-            if v:IsA("BasePart") and v.CanCollide then
-                v.CanCollide = false
-            end
+local function GetBestQuestData()
+    local lvl = GetCurrentLevel()
+    local best = QuestDatabase[1]
+    for _, data in ipairs(QuestDatabase) do
+        if lvl >= data.Min and lvl <= data.Max then
+            best = data
         end
     end
-end)
+    return best
+end
 
--- Sistema de Antigravidade (Prevenção de Queda na Água)
-task.spawn(function()
-    while task.wait() do
-        if getgenv().AutoFarm and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = player.Character.HumanoidRootPart
-            if not hrp:FindFirstChild("AntiGravity") then
-                local bv = Instance.new("BodyVelocity")
-                bv.Name = "AntiGravity"
-                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bv.Velocity = Vector3.new(0, 0, 0)
-                bv.Parent = hrp
-            end
-        else
-            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = player.Character.HumanoidRootPart
-                if hrp:FindFirstChild("AntiGravity") then
-                    hrp.AntiGravity:Destroy()
-                end
-            end
-        end
-    end
-end)
-
--- Movimentação Suave (Tween)
-local function TweenTo(targetCFrame)
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = player.Character.HumanoidRootPart
+-- Movimentação Inteligente com interpolação suave
+local function SmartTween(targetCFrame)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local speed = 300 
-    local tweenInfo = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    local time = distance / Config.TweenSpeed
+    
+    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame + Vector3.new(0, 35, 0)})
+    
     tween:Play()
-    tween.Completed:Wait()
+    return tween
 end
 
--- Pegar Missão
-local function PegarMissao(questTarget)
-    local args = {
-        [1] = "StartQuest",
-        [2] = questTarget.QuestName,
-        [3] = questTarget.QuestLevel
-    }
-    game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer(unpack(args))
+-- Sistema de Ataque Automático por Cliques
+local function TriggerAttack()
+    pcall(function()
+        VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(0.05)
+        VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    end)
 end
 
--- Equipar Arma/Fruta
-local function EquipWeapon()
-    for _, item in pairs(player.Backpack:GetChildren()) do
-        if item:IsA("Tool") and (item.ToolTip == "Melee" or item.ToolTip == "Sword" or item.ToolTip == "Blox Fruit") then
-            player.Character.Humanoid:EquipTool(item)
-            break
-        end
+-- Uso Automático de Habilidades (Z, X, C, V)
+local function TriggerSkills()
+    if not Config.AutoSkills then return end
+    local vim = game:GetService("VirtualInputManager")
+    local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+    
+    for _, key in ipairs(keys) do
+        pcall(function()
+            vim:SendKeyEvent(true, key, false, game)
+            task.wait(0.05)
+            vim:SendKeyEvent(false, key, false, game)
+            task.wait(0.1)
+        end)
     end
 end
 
--- Loop Principal
+-- Motor de Tomada de Decisão (FSM Loop Principal)
 task.spawn(function()
-    while task.wait() do
-        if getgenv().AutoFarm then
+    while task.wait(0.5) do
+        if Config.AutoFarm then
             pcall(function()
-                local questInfo = GetCurrentQuest()
-                if questInfo then
-                    local temQuest = player.PlayerGui.Main.Quest.Visible
-                    if not temQuest then
-                        TweenTo(questInfo.NpcPos)
-                        task.wait(0.5)
-                        PegarMissao(questInfo)
-                    else
-                        local targetMob = nil
-                        for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                            if mob.Name == questInfo.Mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                                targetMob = mob
-                                break
+                local currentLvl = GetCurrentLevel()
+                local questData = GetBestQuestData()
+                local currentQuest = GetActiveQuest()
+                
+                -- Validação e Coleta de Missão
+                if not currentQuest or not string.find(currentQuest, questData.NPC) then
+                    EngineState.CurrentState = "GET_QUEST"
+                    local char = LocalPlayer.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        -- Ir até o NPC da missão
+                        SmartTween(questData.Pos)
+                        task.wait(1)
+                        
+                        -- Simular interação com o NPC de missão
+                        local args = {
+                            [1] = "StartQuest",
+                            [2] = questData.QuestName,
+                            [3] = questData.QuestIndex
+                        }
+                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
+                    end
+                else
+                    -- Estado de Farm Ativo
+                    EngineState.CurrentState = "FARMING"
+                    local enemiesFolder = workspace:FindFirstChild("Enemies")
+                    
+                    if enemiesFolder then
+                        local nearestEnemy = nil
+                        local shortestDist = math.huge
+                        local char = LocalPlayer.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        
+                        if hrp then
+                            for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+                                if enemy.Name == questData.Mob and enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                                    local dist = (hrp.Position - enemy.HumanoidRootPart.Position).Magnitude
+                                    if dist < shortestDist then
+                                        shortestDist = dist
+                                        nearestEnemy = enemy
+                                    end
+                                end
                             end
-                        end
-
-                        if targetMob and targetMob:FindFirstChild("HumanoidRootPart") then
-                            -- Fica acima do Mob para evitar dano
-                            local hitPos = targetMob.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                            TweenTo(hitPos)
-                            EquipWeapon()
                             
-                            -- Clique Automático (M1)
-                            VirtualUser:CaptureController()
-                            VirtualUser:ClickButton1(Vector2.new())
+                            if nearestEnemy then
+                                local enemyHRP = nearestEnemy.HumanoidRootPart
+                                -- Posiciona em cima/atrás do NPC para evitar dano corpo a corpo
+                                SmartTween(enemyHRP.CFrame * CFrame.new(0, 20, 3))
+                                
+                                -- Executa o combate automático inteligente
+                                TriggerAttack()
+                                TriggerSkills()
+                            end
                         end
                     end
                 end
@@ -152,35 +205,4 @@ task.spawn(function()
     end
 end)
 
--- UI Flutuante Arrastável
-local ScreenGui = Instance.new("ScreenGui")
-local ToggleButton = Instance.new("TextButton")
-local UICorner = Instance.new("UICorner")
-
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ResetOnSpawn = false
-
-ToggleButton.Parent = ScreenGui
-ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ToggleButton.Position = UDim2.new(0.85, 0, 0.4, 0)
-ToggleButton.Size = UDim2.new(0, 60, 0, 60)
-ToggleButton.Font = Enum.Font.Code
-ToggleButton.Text = "FARM\nOFF"
-ToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
-ToggleButton.TextSize = 14
-ToggleButton.Active = true
-ToggleButton.Draggable = true 
-
-UICorner.CornerRadius = UDim.new(1, 0)
-UICorner.Parent = ToggleButton
-
-ToggleButton.MouseButton1Click:Connect(function()
-    getgenv().AutoFarm = not getgenv().AutoFarm
-    if getgenv().AutoFarm then
-        ToggleButton.Text = "FARM\nON"
-        ToggleButton.TextColor3 = Color3.fromRGB(50, 255, 50)
-    else
-        ToggleButton.Text = "FARM\nOFF"
-        ToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
-    end
-end)
+print("[SmartEngine]: Motor Inteligente iniciado com sucesso para o First Sea (Level 1-700)!")
