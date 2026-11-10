@@ -1,61 +1,58 @@
-local Players = game:GetService("Players")
+-- Hub de Auto-Farm Blox Fruits (Sea 1: Level 1 ao 700)
+-- Otimizado para Delta Executor
+
+local player = game.Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
-local LocalPlayer = Players.LocalPlayer
 
--- ==========================================
--- 1. PROTEÇÃO DE UI (Otimizado para Delta)
--- ==========================================
-local uiParent = pcall(gethui) and gethui() or game:GetService("CoreGui")
-if uiParent:FindFirstChild("RobynhoHub") then
-    uiParent.RobynhoHub:Destroy()
+local getgenv = getgenv or function() return _G end
+getgenv().AutoFarm = false
+
+-- Tabela de Progressão do Sea 1 (Expansível)
+local QuestList = {
+    {Min = 1, Max = 9, QuestName = "BanditQuest1", QuestLevel = 1, Mob = "Bandit", NpcName = "Bandit Quest Giver", NpcPos = CFrame.new(1059, 16, 1549)},
+    {Min = 10, Max = 14, QuestName = "JungleQuest", QuestLevel = 1, Mob = "Monkey", NpcName = "Adventurer", NpcPos = CFrame.new(-1598, 37, 153)},
+    {Min = 15, Max = 29, QuestName = "JungleQuest", QuestLevel = 2, Mob = "Gorilla", NpcName = "Adventurer", NpcPos = CFrame.new(-1598, 37, 153)},
+    {Min = 30, Max = 39, QuestName = "BuggyQuest1", QuestLevel = 1, Mob = "Pirate", NpcName = "Pirate", NpcPos = CFrame.new(-1140, 4, 3828)},
+    {Min = 40, Max = 59, QuestName = "BuggyQuest1", QuestLevel = 2, Mob = "Brute", NpcName = "Pirate", NpcPos = CFrame.new(-1140, 4, 3828)},
+    {Min = 60, Max = 74, QuestName = "DesertQuest", QuestLevel = 1, Mob = "Desert Bandit", NpcName = "Desert Adventurer", NpcPos = CFrame.new(896, 6, 4388)},
+    {Min = 75, Max = 89, QuestName = "DesertQuest", QuestLevel = 2, Mob = "Desert Officer", NpcName = "Desert Adventurer", NpcPos = CFrame.new(896, 6, 4388)},
+    {Min = 90, Max = 99, QuestName = "SnowQuest", QuestLevel = 1, Mob = "Snow Bandit", NpcName = "Villager", NpcPos = CFrame.new(1384, 87, -1297)},
+    {Min = 100, Max = 119, QuestName = "SnowQuest", QuestLevel = 2, Mob = "Snowman", NpcName = "Villager", NpcPos = CFrame.new(1384, 87, -1297)},
+    {Min = 120, Max = 149, QuestName = "MarineQuest2", QuestLevel = 1, Mob = "Chief Petty Officer", NpcName = "Marine", NpcPos = CFrame.new(-5036, 28, 4324)},
+    {Min = 150, Max = 174, QuestName = "SkyQuest", QuestLevel = 1, Mob = "Sky Bandit", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4841, 717, -2620)},
+    {Min = 175, Max = 189, QuestName = "SkyQuest", QuestLevel = 2, Mob = "Dark Master", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4841, 717, -2620)},
+    {Min = 190, Max = 209, QuestName = "PrisonerQuest", QuestLevel = 1, Mob = "Prisoner", NpcName = "Guard", NpcPos = CFrame.new(5308, 1, 474)},
+    {Min = 210, Max = 249, QuestName = "PrisonerQuest", QuestLevel = 2, Mob = "Dangerous Prisoner", NpcName = "Guard", NpcPos = CFrame.new(5308, 1, 474)},
+    {Min = 250, Max = 299, QuestName = "ColosseumQuest", QuestLevel = 1, Mob = "Toga Warrior", NpcName = "Gladiator", NpcPos = CFrame.new(-2246, 7, -2988)},
+    {Min = 300, Max = 324, QuestName = "MagmaQuest", QuestLevel = 1, Mob = "Military Soldier", NpcName = "Magma Ninja", NpcPos = CFrame.new(-5316, 12, 8514)},
+    {Min = 325, Max = 374, QuestName = "MagmaQuest", QuestLevel = 2, Mob = "Military Spy", NpcName = "Magma Ninja", NpcPos = CFrame.new(-5316, 12, 8514)},
+    {Min = 375, Max = 399, QuestName = "FishmanQuest", QuestLevel = 1, Mob = "Fishman Warrior", NpcName = "Fishman", NpcPos = CFrame.new(61122, 18, 1569)},
+    {Min = 400, Max = 449, QuestName = "FishmanQuest", QuestLevel = 2, Mob = "Fishman Commando", NpcName = "Fishman", NpcPos = CFrame.new(61122, 18, 1569)},
+    {Min = 450, Max = 474, QuestName = "SkyExp1Quest", QuestLevel = 1, Mob = "God's Guard", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4721, 845, -1954)},
+    {Min = 475, Max = 524, QuestName = "SkyExp1Quest", QuestLevel = 2, Mob = "Shanda", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-4721, 845, -1954)},
+    {Min = 525, Max = 549, QuestName = "SkyExp2Quest", QuestLevel = 1, Mob = "Royal Squad", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-7904, 5635, -463)},
+    {Min = 550, Max = 624, QuestName = "SkyExp2Quest", QuestLevel = 2, Mob = "Royal Soldier", NpcName = "Sky Adventurer", NpcPos = CFrame.new(-7904, 5635, -463)},
+    {Min = 625, Max = 699, QuestName = "FountainQuest", QuestLevel = 1, Mob = "Galley Pirate", NpcName = "Galleon", NpcPos = CFrame.new(5259, 38, 4050)},
+    {Min = 700, Max = 700, QuestName = "FountainQuest", QuestLevel = 2, Mob = "Galley Captain", NpcName = "Galleon", NpcPos = CFrame.new(5259, 38, 4050)}
+}
+
+-- Função para identificar a quest atual com base no nível do jogador
+local function GetCurrentQuest()
+    local level = player.Data.Level.Value
+    for _, quest in pairs(QuestList) do
+        if level >= quest.Min and level <= quest.Max then
+            return quest
+        end
+    end
+    return nil
 end
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RobynhoHub"
-ScreenGui.Parent = uiParent
-
--- ==========================================
--- 2. UI FLUTUANTE DRAGGABLE
--- ==========================================
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 200, 0, 120)
-MainFrame.Position = UDim2.new(0.5, -100, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BorderSizePixel = 2
-MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
-MainFrame.Active = true
-MainFrame.Draggable = true 
-MainFrame.Parent = ScreenGui
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.Code
-Title.TextSize = 14
-Title.Text = "Robynho Hub - Core"
-Title.Parent = MainFrame
-
-local ToggleFarm = Instance.new("TextButton")
-ToggleFarm.Size = UDim2.new(0.8, 0, 0, 35)
-ToggleFarm.Position = UDim2.new(0.1, 0, 0.45, 0)
-ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-ToggleFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleFarm.Font = Enum.Font.Code
-ToggleFarm.TextSize = 14
-ToggleFarm.Text = "Auto-Farm: OFF"
-ToggleFarm.Parent = MainFrame
-
--- ==========================================
--- 3. FUNÇÕES DE COMBATE E NOCLIP
--- ==========================================
-_G.AutoFarm = false
-
--- Noclip Limpo
+-- Sistema de Noclip para atravessar objetos durante o voo
 RunService.Stepped:Connect(function()
-    if _G.AutoFarm and LocalPlayer.Character then
-        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+    if getgenv().AutoFarm and player.Character then
+        for _, v in pairs(player.Character:GetDescendants()) do
             if v:IsA("BasePart") and v.CanCollide then
                 v.CanCollide = false
             end
@@ -63,38 +60,108 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Auto Click (Usando VirtualUser para simular clique de tela)
-local function AutoClick()
-    task.spawn(function()
-        while _G.AutoFarm do
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton1(Vector2.new())
-            task.wait(0.1)
-        end
-    end)
+-- Movimentação Suave (Tween)
+local function TweenTo(targetCFrame)
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local distance = (hrp.Position - targetCFrame.Position).Magnitude
+    local speed = 300 -- Ajuste a velocidade para evitar kicks do anti-cheat
+    local tweenInfo = TweenInfo.new(distance / speed, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    tween:Play()
+    tween.Completed:Wait()
 end
 
--- ==========================================
--- 4. LÓGICA DO BOTÃO
--- ==========================================
-ToggleFarm.MouseButton1Click:Connect(function()
-    _G.AutoFarm = not _G.AutoFarm
-    
-    if _G.AutoFarm then
-        ToggleFarm.Text = "Auto-Farm: ON"
-        ToggleFarm.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
-        
-        -- Equipa a ferramenta de combate (Melee ou Espada)
-        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
-            if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool.ToolTip == "Sword") then
-                LocalPlayer.Character.Humanoid:EquipTool(tool)
-                break
-            end
+-- Pegar Missão via Remote
+local function PegarMissao(questTarget)
+    local args = {
+        [1] = "StartQuest",
+        [2] = questTarget.QuestName,
+        [3] = questTarget.QuestLevel
+    }
+    game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer(unpack(args))
+end
+
+-- Equipar Arma/Fruta
+local function EquipWeapon()
+    for _, item in pairs(player.Backpack:GetChildren()) do
+        if item:IsA("Tool") and (item.ToolTip == "Melee" or item.ToolTip == "Sword" or item.ToolTip == "Blox Fruit") then
+            player.Character.Humanoid:EquipTool(item)
+            break
         end
-        
-        AutoClick()
+    end
+end
+
+-- Loop Principal de Farm
+task.spawn(function()
+    while task.wait() do
+        if getgenv().AutoFarm then
+            pcall(function()
+                local questInfo = GetCurrentQuest()
+                if questInfo then
+                    -- Verifica se já possui a missão ativa
+                    local temQuest = player.PlayerGui.Main.Quest.Visible
+                    if not temQuest then
+                        -- Vai até o NPC e pega a missão
+                        TweenTo(questInfo.NpcPos)
+                        task.wait(0.5)
+                        PegarMissao(questInfo)
+                    else
+                        -- Procura e ataca o Mob
+                        local targetMob = nil
+                        for _, mob in pairs(workspace.Enemies:GetChildren()) do
+                            if mob.Name == questInfo.Mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+                                targetMob = mob
+                                break
+                            end
+                        end
+
+                        if targetMob and targetMob:FindFirstChild("HumanoidRootPart") then
+                            -- Fica acima do Mob para evitar dano
+                            local hitPos = targetMob.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                            TweenTo(hitPos)
+                            EquipWeapon()
+                            
+                            -- Clique Automático (M1)
+                            VirtualUser:CaptureController()
+                            VirtualUser:ClickButton1(Vector2.new())
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- UI Flutuante Arrastável
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleButton = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleButton.Position = UDim2.new(0.85, 0, 0.4, 0)
+ToggleButton.Size = UDim2.new(0, 60, 0, 60)
+ToggleButton.Font = Enum.Font.Code
+ToggleButton.Text = "FARM\nOFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+ToggleButton.TextSize = 14
+ToggleButton.Active = true
+ToggleButton.Draggable = true -- Permite arrastar na tela
+
+UICorner.CornerRadius = UDim.new(1, 0) -- Botão redondo
+UICorner.Parent = ToggleButton
+
+ToggleButton.MouseButton1Click:Connect(function()
+    getgenv().AutoFarm = not getgenv().AutoFarm
+    if getgenv().AutoFarm then
+        ToggleButton.Text = "FARM\nON"
+        ToggleButton.TextColor3 = Color3.fromRGB(50, 255, 50)
     else
-        ToggleFarm.Text = "Auto-Farm: OFF"
-        ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        ToggleButton.Text = "FARM\nOFF"
+        ToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50)
     end
 end)
