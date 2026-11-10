@@ -1,425 +1,316 @@
--- =====================================================================
--- ⚙️ OMEGA CORE SEA 1 - PARTE 1 (SERVIÇOS, UI E MOTOR BÉZIER)
--- =====================================================================
+-- =========================================================================
+-- 🌌 ROBYNHOFUT SCRIPT HUB | V1 EXTREME EDITION
+-- Otimizado para Delta Executor | Blox Fruits (Sea 1, 2 e 3)
+-- =========================================================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Camera = workspace.CurrentCamera
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local CoreGui = game:GetService("CoreGui")
+
 local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
--- 🛡️ RADAR ESP INVISÍVEL (DRAWING API)
-local ESP_Boxes = {}
-_G.RadarEnabled = false
-
-local function CreateESP(target)
-    local box = Drawing.new("Square")
-    box.Visible = false
-    box.Color = Color3.fromRGB(255, 50, 50)
-    box.Thickness = 1.5
-    box.Filled = false
-    box.Transparency = 1
-    
-    local nameText = Drawing.new("Text")
-    nameText.Visible = false
-    nameText.Color = Color3.fromRGB(255, 255, 255)
-    nameText.Size = 14
-    nameText.Center = true
-    nameText.Outline = true
-
-    ESP_Boxes[target] = {Box = box, Text = nameText}
-end
-
-RunService.RenderStepped:Connect(function()
-    if not _G.RadarEnabled then
-        for _, esp in pairs(ESP_Boxes) do esp.Box.Visible = false; esp.Text.Visible = false end
-        return
-    end
-    for target, esp in pairs(ESP_Boxes) do
-        if target and target:FindFirstChild("HumanoidRootPart") and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
-            local pos, onScreen = Camera:WorldToViewportPoint(target.HumanoidRootPart.Position)
-            if onScreen then
-                esp.Box.Size = Vector2.new(2000 / pos.Z, 2500 / pos.Z)
-                esp.Box.Position = Vector2.new(pos.X - esp.Box.Size.X / 2, pos.Y - esp.Box.Size.Y / 2)
-                esp.Box.Visible = true
-                esp.Text.Text = target.Name .. " [" .. math.floor(target.Humanoid.Health) .. "]"
-                esp.Text.Position = Vector2.new(pos.X, pos.Y - esp.Box.Size.Y / 2 - 15)
-                esp.Text.Visible = true
-            else
-                esp.Box.Visible = false; esp.Text.Visible = false
-            end
-        else
-            esp.Box.Visible = false; esp.Text.Visible = false
-            if esp.Box then esp.Box:Remove() end
-            if esp.Text then esp.Text:Remove() end
-            ESP_Boxes[target] = nil
-        end
-    end
-end)
-
-workspace.Enemies.ChildAdded:Connect(function(child) task.wait(0.5); CreateESP(child) end)
-
--- 🚀 MOTOR DE VOO BÉZIER (BYPASS ANTI-CHEAT)
-local function BezierCurve(t, p0, p1, p2)
-    return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
-end
-
-local function SmartBypassMove(targetCFrame)
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
-    local hrp = LocalPlayer.Character.HumanoidRootPart
-    local startPos = hrp.Position
-    local endPos = targetCFrame.Position
-    local distance = (startPos - endPos).Magnitude
-    
-    -- Se estiver muito perto, vai direto
-    if distance < 50 then
-        hrp.CFrame = targetCFrame
-        return
-    end
-
-    local controlPoint = startPos:Lerp(endPos, 0.5) + Vector3.new(0, distance * 0.4, 0) -- Sobe em arco
-    local speed = 300 
-    local timeToTravel = math.clamp(distance / speed, 0.1, 15)
-    
-    local tweenValue = Instance.new("NumberValue")
-    tweenValue.Value = 0
-    local tweenInfo = TweenInfo.new(timeToTravel, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(tweenValue, tweenInfo, {Value = 1})
-    
-    local connection
-    connection = tweenValue.Changed:Connect(function(val)
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local nextPos = BezierCurve(val, startPos, controlPoint, endPos)
-            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(nextPos, endPos)
-        end
-    end)
-    
-    tween:Play()
-    tween.Completed:Wait()
-    connection:Disconnect()
-    tweenValue:Destroy()
-end
-
--- 🖥️ INTERFACE GRÁFICA (HUB)
-local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
-ScreenGui.Name = "OmegaSea1Hub"
-
--- Botão Flutuante
-local FloatBtn = Instance.new("TextButton", ScreenGui)
-FloatBtn.Size = UDim2.new(0, 50, 0, 50)
-FloatBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
-FloatBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-FloatBtn.Text = "🌊"
-FloatBtn.TextSize = 25
-Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
-Instance.new("UIStroke", FloatBtn).Color = Color3.fromRGB(0, 150, 255)
-
-local dragging, dragInput, dragStart, startPos
-FloatBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startPos = FloatBtn.Position
-    end
-end)
-FloatBtn.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        FloatBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-end)
-
--- Janela Principal
-local MainWindow = Instance.new("Frame", ScreenGui)
-MainWindow.Size = UDim2.new(0, 350, 0, 450)
-MainWindow.Position = UDim2.new(0.5, -175, 0.5, -225)
-MainWindow.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainWindow.Visible = false
-Instance.new("UICorner", MainWindow).CornerRadius = UDim.new(0, 8)
-Instance.new("UIStroke", MainWindow).Color = Color3.fromRGB(0, 150, 255)
-
-local Title = Instance.new("TextLabel", MainWindow)
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Title.Text = " OMEGA CORE - SEA 1"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
-
-local Scroll = Instance.new("ScrollingFrame", MainWindow)
-Scroll.Size = UDim2.new(1, -20, 1, -50)
-Scroll.Position = UDim2.new(0, 10, 0, 40)
-Scroll.BackgroundTransparency = 1
-Scroll.ScrollBarThickness = 4
-local UIList = Instance.new("UIListLayout", Scroll)
-UIList.Padding = UDim.new(0, 8)
-
-FloatBtn.MouseButton1Click:Connect(function() MainWindow.Visible = not MainWindow.Visible end)
-
-local function CreateToggle(name, callback)
-    local Btn = Instance.new("TextButton", Scroll)
-    Btn.Size = UDim2.new(1, 0, 0, 35)
-    Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    Btn.Text = name .. " [ OFF ]"
-    Btn.TextColor3 = Color3.fromRGB(255, 100, 100)
-    Btn.Font = Enum.Font.GothamSemibold
-    Btn.TextSize = 13
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 5)
-    
-    local state = false
-    Btn.MouseButton1Click:Connect(function()
-        state = not state
-        Btn.Text = state and (name .. " [ ON ]") or (name .. " [ OFF ]")
-        Btn.TextColor3 = state and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
-        callback(state)
-    end)
-end
--- =====================================================================
--- 🗺️ OMEGA CORE SEA 1 - PARTE 2 (DATABASE DE QUESTS E SKILLS)
--- =====================================================================
-
--- ⚔️ SISTEMA DE AUTO SKILL EQUIPADA
-_G.AutoSkill = false
-local function UseEquippedSkills()
-    if not _G.AutoSkill then return end
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChildOfClass("Tool") then
-        local skills = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
-        for _, key in pairs(skills) do
-            VirtualInputManager:SendKeyEvent(true, key, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, key, false, game)
-            task.wait(0.1)
-        end
-    end
-end
-
-task.spawn(function()
-    while task.wait(0.5) do
-        if _G.AutoSkill then UseEquippedSkills() end
-    end
-end)
-
--- 📚 DICIONÁRIO DE PROGRESSÃO (LEVEL 1 AO 700)
--- Estrutura: {Level Min, Level Max, "Nome da Quest", Level da Quest na UI, "Nome do Mob", CFrame do NPC, CFrame do Mob}
-local QuestDatabase = {
-    {1, 14, "Bandit Quest1", 1, "Bandit", CFrame.new(1060, 16, 1547), CFrame.new(1148, 16, 1610)},
-    {15, 29, "Jungle Quest", 1, "Monkey", CFrame.new(-1601, 37, 153), CFrame.new(-1432, 22, 109)},
-    {30, 39, "Buggy Quest1", 1, "Pirate", CFrame.new(-1139, 4, 3824), CFrame.new(-1203, 4, 3935)},
-    {40, 59, "Buggy Quest1", 2, "Brute", CFrame.new(-1139, 4, 3824), CFrame.new(-1152, 14, 4296)},
-    {60, 74, "Desert Quest", 1, "Desert Bandit", CFrame.new(896, 6, 4388), CFrame.new(991, 5, 4443)},
-    {75, 89, "Desert Quest", 2, "Desert Officer", CFrame.new(896, 6, 4388), CFrame.new(1541, 4, 4363)},
-    {90, 99, "Snow Quest", 1, "Snow Bandit", CFrame.new(1385, 87, -1297), CFrame.new(1331, 105, -1451)},
-    {100, 119, "Snow Quest", 2, "Snowman", CFrame.new(1385, 87, -1297), CFrame.new(1324, 105, -1532)},
-    {120, 149, "Marine Quest2", 1, "Chief Petty Officer", CFrame.new(-5035, 28, 4324), CFrame.new(-4849, 20, 4323)},
-    {150, 174, "Sky Quest", 1, "Sky Bandit", CFrame.new(-4839, 717, -2619), CFrame.new(-4983, 278, -2890)},
-    {175, 189, "Sky Quest", 2, "Dark Master", CFrame.new(-4839, 717, -2619), CFrame.new(-5243, 389, -2270)},
-    {190, 210, "Prisoner Quest", 1, "Prisoner", CFrame.new(5307, 1, 474), CFrame.new(5378, 1, 622)},
-    {211, 249, "Prisoner Quest", 2, "Dangerous Prisoner", CFrame.new(5307, 1, 474), CFrame.new(5427, 1, 725)},
-    {250, 274, "Colosseum Quest", 1, "Toga Warrior", CFrame.new(-2255, 7, -3134), CFrame.new(-1805, 14, -2824)},
-    {275, 299, "Colosseum Quest", 2, "Gladiator", CFrame.new(-2255, 7, -3134), CFrame.new(-1353, 7, -3259)},
-    {300, 329, "Magma Quest", 1, "Military Soldier", CFrame.new(-5313, 11, 8515), CFrame.new(-5418, 20, 8436)},
-    {330, 374, "Magma Quest", 2, "Military Spy", CFrame.new(-5313, 11, 8515), CFrame.new(-5770, 77, 8740)},
-    {375, 399, "Fishman Quest", 1, "Fishman Warrior", CFrame.new(61122, 18, 1568), CFrame.new(60938, 18, 1526)},
-    {400, 449, "Fishman Quest", 2, "Fishman Commando", CFrame.new(61122, 18, 1568), CFrame.new(61845, 18, 1435)},
-    {450, 474, "Sky Exp1 Quest", 1, "God's Guard", CFrame.new(-4721, 844, -1950), CFrame.new(-4698, 844, -1910)},
-    {475, 524, "Sky Exp1 Quest", 2, "Shanda", CFrame.new(-4721, 844, -1950), CFrame.new(-7667, 5598, -463)},
-    {525, 549, "Sky Exp2 Quest", 1, "Royal Squad", CFrame.new(-7903, 5635, -391), CFrame.new(-7671, 5606, -1451)},
-    {550, 624, "Sky Exp2 Quest", 2, "Royal Soldier", CFrame.new(-7903, 5635, -391), CFrame.new(-7821, 5605, -1743)},
-    {625, 649, "Fountain Quest", 1, "Galley Pirate", CFrame.new(5256, 38, 4050), CFrame.new(5566, 38, 3986)},
-    {650, 700, "Fountain Quest", 2, "Galley Captain", CFrame.new(5256, 38, 4050), CFrame.new(5684, 38, 4894)}
+-- ==========================================
+-- ⚙️ CONFIGURAÇÕES GLOBAIS
+-- ==========================================
+local Config = {
+    AutoClick = false,
+    AutoSkills = false,
+    FruitFarm = false,
+    TweenSpeed = 300, -- Studs por segundo (Seguro no Blox Fruits)
+    VisitedServersFile = "RobynhoVisitedServers.json",
+    PlaceId = game.PlaceId
 }
 
--- Função de auto equipar arma (Meele ou Sword) para farmar
-local function EquipWeapon()
-    if not LocalPlayer.Character then return end
-    for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
-        if item:IsA("Tool") and (item.ToolTip == "Melee" or item.ToolTip == "Sword" or item.ToolTip == "Blox Fruit") then
-            item.Parent = LocalPlayer.Character
-            break
-        end
-    end
-end
--- =====================================================================
--- 🧠 OMEGA CORE SEA 1 - PARTE 3 (LÓGICA DO AUTO FARM E COMBATE)
--- =====================================================================
+-- ==========================================
+-- 🛡️ ANTI-AFK BYPASS
+-- ==========================================
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
 
-local function GetQuestData()
-    local myLevel = LocalPlayer.Data.Level.Value
-    for _, data in pairs(QuestDatabase) do
-        if myLevel >= data[1] and myLevel <= data[2] then
-            return data
-        end
-    end
-    return QuestDatabase[#QuestDatabase] -- Se passar do 700, continua na última quest
-end
+-- ==========================================
+-- 🛸 SISTEMA DE MOVIMENTAÇÃO (TWEEN & NOCLIP)
+-- ==========================================
+local TweenForce
+local noclipLoop
 
-local function FarmQuest()
-    local data = GetQuestData()
-    local questName = data[3]
-    local questNum = data[4]
-    local mobName = data[5]
-    local npcPos = data[6]
-    local mobPos = data[7]
-    
-    local questActive = LocalPlayer.PlayerGui.Main.Quest.Visible
-    local currentQuestName = LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text
-
-    if not questActive or not string.find(currentQuestName, mobName) then
-        -- Cancelar quest errada se houver
-        if questActive then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("AbandonQuest")
-            task.wait(0.5)
-        end
-        
-        -- Ir até o NPC
-        SmartBypassMove(npcPos)
-        task.wait(0.5)
-        
-        -- Puxar a Quest
-        local npc = workspace.NPCs:FindFirstChild("Quest Giver") or workspace.NPCs:FindFirstChild(questName .. " Giver")
-        if npc then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", questName, questNum)
-        end
-    else
-        -- A Quest certa está ativa, procurar os monstros
-        EquipWeapon()
-        
-        local mobEncontrado = false
-        for _, mob in pairs(workspace.Enemies:GetChildren()) do
-            if string.find(mob.Name, mobName) and mob:FindFirstChild("HumanoidRootPart") and mob.Humanoid.Health > 0 then
-                mobEncontrado = true
-                
-                -- Anti-Borracha (Collision Bypass) para bater sem levar hit
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
-                        if v:IsA("BasePart") then v.CanCollide = false end
-                    end
-                end
-
-                -- Ficar acima/atrás do monstro
-                local targetPos = mob.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
-                SmartBypassMove(targetPos)
-                
-                -- Atacar enquanto estiver vivo
-                while mob.Humanoid.Health > 0 and _G.AutoFarmLv do
-                    targetPos = mob.HumanoidRootPart.CFrame * CFrame.new(0, 10, 0)
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = targetPos
-                    
-                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    task.wait(0.1)
-                end
-                break -- Depois de matar, sai do for e procura outro
+local function Noclip()
+    if Character and Character:FindFirstChild("HumanoidRootPart") then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide == true then
+                part.CanCollide = false
             end
         end
+    end
+end
+
+local function TweenTo(TargetCFrame)
+    if not Character or not Character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local HRP = Character.HumanoidRootPart
+    local Distance = (HRP.Position - TargetCFrame.Position).Magnitude
+    local Time = Distance / Config.TweenSpeed
+
+    local TweenInfoObj = TweenInfo.new(Time, Enum.EasingStyle.Linear)
+    local Goal = {CFrame = TargetCFrame}
+    
+    if TweenForce then TweenForce:Cancel() end
+    TweenForce = TweenService:Create(HRP, TweenInfoObj, Goal)
+    
+    if not noclipLoop then
+        noclipLoop = RunService.Stepped:Connect(Noclip)
+    end
+    
+    TweenForce:Play()
+    TweenForce.Completed:Wait()
+    
+    if noclipLoop then
+        noclipLoop:Disconnect()
+        noclipLoop = nil
+    end
+end
+
+-- ==========================================
+-- 🔄 SERVER HOP PERSISTENTE (DELTA API)
+-- ==========================================
+local function GetVisitedServers()
+    if isfile and isfile(Config.VisitedServersFile) then
+        local data = readfile(Config.VisitedServersFile)
+        local success, decoded = pcall(function() return HttpService:JSONDecode(data) end)
+        if success then return decoded end
+    end
+    return {}
+end
+
+local function SaveServer(jobId)
+    if writefile then
+        local servers = GetVisitedServers()
+        table.insert(servers, jobId)
+        if #servers > 50 then table.remove(servers, 1) end -- Limpa os mais antigos
+        writefile(Config.VisitedServersFile, HttpService:JSONEncode(servers))
+    end
+end
+
+local function ServerHop()
+    local url = "https://games.roblox.com/v1/games/" .. Config.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local success, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if success then
+        local data = HttpService:JSONDecode(result)
+        local visited = GetVisitedServers()
         
-        -- Se não achou monstro perto, vai pro spawn deles esperar
-        if not mobEncontrado then
-            SmartBypassMove(mobPos)
+        for _, server in ipairs(data.data) do
+            if server.playing < server.maxPlayers - 1 and server.id ~= game.JobId then
+                local isVisited = false
+                for _, v in ipairs(visited) do
+                    if v == server.id then isVisited = true break end
+                end
+                
+                if not isVisited then
+                    SaveServer(server.id)
+                    TeleportService:TeleportToPlaceInstance(Config.PlaceId, server.id, LocalPlayer)
+                    return
+                end
+            end
         end
     end
 end
 
--- Loop Mestre do Farm Level
+-- ==========================================
+-- ⚔️ LÓGICA DAS FUNÇÕES
+-- ==========================================
+
+-- Auto Clicker
 task.spawn(function()
     while task.wait() do
-        if _G.AutoFarmLv then
-            pcall(function() FarmQuest() end)
+        if Config.AutoClick then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton1(Vector2.new())
+            -- Opcional: Atacar com a ferramenta atual
+            local tool = Character:FindFirstChildOfClass("Tool")
+            if tool then tool:Activate() end
         end
     end
 end)
 
--- Lógica dos Bosses (Drop Farm)
-local function FarmBosses()
-    local Bosses = {"The Saw", "Warden", "Chief Warden", "Swan", "Fishman Lord", "Thunder God", "Cyborg", "Saber Expert", "Ice Admiral"}
-    while _G.AutoBossDrops do
-        local bossFound = false
-        for _, bossName in pairs(Bosses) do
-            local boss = workspace.Enemies:FindFirstChild(bossName)
-            if boss and boss:FindFirstChild("HumanoidRootPart") and boss.Humanoid.Health > 0 then
-                bossFound = true
-                EquipWeapon()
-                while boss.Humanoid.Health > 0 and _G.AutoBossDrops do
-                    local targetPos = boss.HumanoidRootPart.CFrame * CFrame.new(0, 15, 0)
-                    SmartBypassMove(targetPos)
-                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-                    task.wait(0.1)
-                end
+-- Auto Skills
+local skills = {"Z", "X", "C", "V"}
+task.spawn(function()
+    while task.wait(0.5) do
+        if Config.AutoSkills then
+            for _, key in ipairs(skills) do
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[key], false, game)
+                task.wait(0.1)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[key], false, game)
+                task.wait(0.2)
             end
         end
-        if not bossFound then task.wait(3) end
     end
-end
--- =====================================================================
--- 🎛️ OMEGA CORE SEA 1 - PARTE 4 (TOGGLES DA INTERFACE)
--- =====================================================================
-
--- Variáveis Globais
-_G.AutoFarmLv = false
-_G.AutoBossDrops = false
-_G.AutoSaber = false
-
--- 1. Auto Farm Level
-CreateToggle("⚔️ Auto Farm (Lv 1 - 700)", function(state)
-    _G.AutoFarmLv = state
 end)
 
--- 2. Farm de Bosses
-CreateToggle("👑 Farmar Drops de Bosses", function(state)
-    _G.AutoBossDrops = state
-    if state then task.spawn(FarmBosses) end
-end)
-
--- 3. Radar ESP
-CreateToggle("👁️ Radar ESP Invisível", function(state)
-    _G.RadarEnabled = state
-end)
-
--- 4. Auto Skill
-CreateToggle("🔥 Usar Skills Equipadas", function(state)
-    _G.AutoSkill = state
-end)
-
--- 5. Comprar Status (Aura, Geppo, Soru)
-CreateToggle("💰 Auto Comprar Haki/Passos", function(state)
-    if state then
-        local args = {"BuyHaki", "BuyGeppo", "BuySoru"}
-        for _, skill in pairs(args) do
-            pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer(skill) end)
+-- Auto Fruit Sniper
+task.spawn(function()
+    while task.wait(1) do
+        if Config.FruitFarm then
+            local foundFruit = false
+            for _, item in ipairs(workspace:GetChildren()) do
+                if item:IsA("Tool") and string.find(item.Name, "Fruit") and item:FindFirstChild("Handle") then
+                    foundFruit = true
+                    TweenTo(item.Handle.CFrame)
+                    task.wait(0.5)
+                    -- Força equipar se cair no chão
+                    if Character:FindFirstChild("Humanoid") then
+                        Character.Humanoid:EquipTool(item)
+                    end
+                    -- Função nativa do Blox Fruits para guardar na mochila
+                    game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("StoreFruit", item:GetAttribute("OriginalName") or item.Name)
+                end
+            end
+            if not foundFruit then
+                -- Se não achar fruta e o hop estiver ligado na sua mente, ele executaria o hop aqui.
+            end
         end
-        -- Desliga o botão automaticamente depois de clicar
-        task.wait(1)
-        state = false
     end
 end)
 
--- 6. Puzzle do Saber Automático
-CreateToggle("🧩 Completar Puzzle do Saber", function(state)
-    _G.AutoSaber = state
-    if state then
-        task.spawn(function()
-            -- Esta função usa invocações diretas ao servidor (CommF_) em vez de andar
-            -- É mais seguro e rápido apertar os botões via Remote Event do que fisicamente
-            pcall(function()
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("ProQuestProgress", "SickMan")
-                task.wait(1)
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("ProQuestProgress", "RichMan")
-            end)
-            print("Eventos do Saber acionados!")
-        end)
+-- ==========================================
+-- 🎨 INTERFACE GRÁFICA (UI FLUTUANTE)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RobynhoHub"
+ScreenGui.ResetOnSpawn = false
+-- Usa gethui() se suportado (Protege contra Detections)
+ScreenGui.Parent = (gethui and gethui()) or CoreGui
+
+-- Botão Flutuante (Draggable)
+local FloatingBtn = Instance.new("TextButton")
+FloatingBtn.Size = UDim2.new(0, 50, 0, 50)
+FloatingBtn.Position = UDim2.new(0, 20, 0, 150)
+FloatingBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+FloatingBtn.Text = "RH"
+FloatingBtn.TextColor3 = Color3.fromRGB(255, 170, 0)
+FloatingBtn.TextScaled = true
+FloatingBtn.Font = Enum.Font.GothamBold
+FloatingBtn.Parent = ScreenGui
+Instance.new("UICorner", FloatingBtn).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", FloatingBtn).Color = Color3.fromRGB(255, 170, 0)
+
+-- Painel Principal
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 250, 0, 300)
+MainFrame.Position = UDim2.new(0, 80, 0, 150)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(255, 170, 0)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundTransparency = 1
+Title.Text = "Robynho Hub V1"
+Title.TextColor3 = Color3.fromRGB(255, 170, 0)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.Parent = MainFrame
+
+-- Sistema Draggable para o Botão Flutuante
+local UIS = game:GetService("UserInputService")
+local dragging, dragInput, dragStart, startPos
+
+FloatingBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = FloatingBtn.Position
     end
 end)
 
--- Aviso no Console
-print("=======================================")
-print("✅ OMEGA CORE SEA 1 CARREGADO COM SUCESSO")
-print("=======================================")
+FloatingBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        FloatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- Abrir/Fechar Menu
+FloatingBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- ==========================================
+-- 🎛️ GERADOR DE BOTÕES (TOGGLES)
+-- ==========================================
+local currentY = 50
+local function CreateToggle(name, configKey)
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
+    toggleBtn.Position = UDim2.new(0.05, 0, 0, currentY)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    toggleBtn.Text = name .. " [OFF]"
+    toggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    toggleBtn.Font = Enum.Font.GothamSemibold
+    toggleBtn.TextSize = 14
+    toggleBtn.Parent = MainFrame
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 5)
+    
+    currentY = currentY + 45
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        Config[configKey] = not Config[configKey]
+        if Config[configKey] then
+            toggleBtn.Text = name .. " [ON]"
+            toggleBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            toggleBtn.Text = name .. " [OFF]"
+            toggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end)
+end
+
+local function CreateActionBtn(name, actionFunc)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Position = UDim2.new(0.05, 0, 0, currentY)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 10, 10)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 14
+    btn.Parent = MainFrame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    
+    currentY = currentY + 45
+    
+    btn.MouseButton1Click:Connect(actionFunc)
+end
+
+-- Criando os botões na UI
+CreateToggle("Auto Clicker", "AutoClick")
+CreateToggle("Auto Skills (Z,X,C,V)", "AutoSkills")
+CreateToggle("Auto Fruit Sniper", "FruitFarm")
+CreateActionBtn("⚡ Server Hop Manual", ServerHop)
+
+print("✅ RobynhoHub carregado com sucesso!")
