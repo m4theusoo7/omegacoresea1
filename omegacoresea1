@@ -1,40 +1,46 @@
-local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==========================================
--- 1. UI FLUTUANTE DRAGGABLE (Otimizada para Mobile)
+-- 1. PROTEÇÃO DE UI (Otimizado para Delta)
 -- ==========================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ModHubBase"
--- Bypass para não aparecer em capturas de tela e injetar direto no CoreGui
-if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end
-ScreenGui.Parent = CoreGui
+local uiParent = pcall(gethui) and gethui() or game:GetService("CoreGui")
+if uiParent:FindFirstChild("RobynhoHub") then
+    uiParent.RobynhoHub:Destroy()
+end
 
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "RobynhoHub"
+ScreenGui.Parent = uiParent
+
+-- ==========================================
+-- 2. UI FLUTUANTE DRAGGABLE
+-- ==========================================
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 220, 0, 160)
-MainFrame.Position = UDim2.new(0.5, -110, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.BorderSizePixel = 0
+MainFrame.Size = UDim2.new(0, 200, 0, 120)
+MainFrame.Position = UDim2.new(0.5, -100, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
 MainFrame.Active = true
-MainFrame.Draggable = true -- Permite arrastar na tela
+MainFrame.Draggable = true 
 MainFrame.Parent = ScreenGui
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 35)
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.Code
 Title.TextSize = 14
-Title.Text = "Painel Modular - Delta"
+Title.Text = "Robynho Hub - Core"
 Title.Parent = MainFrame
 
 local ToggleFarm = Instance.new("TextButton")
-ToggleFarm.Size = UDim2.new(0.85, 0, 0, 35)
-ToggleFarm.Position = UDim2.new(0.075, 0, 0.35, 0)
-ToggleFarm.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ToggleFarm.Size = UDim2.new(0.8, 0, 0, 35)
+ToggleFarm.Position = UDim2.new(0.1, 0, 0.45, 0)
+ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 ToggleFarm.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleFarm.Font = Enum.Font.Code
 ToggleFarm.TextSize = 14
@@ -42,12 +48,13 @@ ToggleFarm.Text = "Auto-Farm: OFF"
 ToggleFarm.Parent = MainFrame
 
 -- ==========================================
--- 2. NOCLIP DINÂMICO (Bypass Anti-Cheat)
+-- 3. FUNÇÕES DE COMBATE E NOCLIP
 -- ==========================================
-local noclipEvent
-noclipEvent = RunService.Stepped:Connect(function()
-    if _G.AutoFarm then
-        -- Desativa a colisão apenas quando o farm está ativo
+_G.AutoFarm = false
+
+-- Noclip Limpo
+RunService.Stepped:Connect(function()
+    if _G.AutoFarm and LocalPlayer.Character then
         for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
             if v:IsA("BasePart") and v.CanCollide then
                 v.CanCollide = false
@@ -56,83 +63,38 @@ noclipEvent = RunService.Stepped:Connect(function()
     end
 end)
 
--- ==========================================
--- 3. RADAR ESP (Drawing API) - Limpo e sem lag
--- ==========================================
-_G.ESP_Ativo = true
-
-local function CreateESP(part, name, color)
-    local text = Drawing.new("Text")
-    text.Visible = false
-    text.Center = true
-    text.Outline = true
-    text.Font = 2
-    text.Color = color
-    text.Size = 15
-
-    RunService.RenderStepped:Connect(function()
-        if part and part.Parent and _G.ESP_Ativo and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(part.Position)
-            if onScreen then
-                local distance = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - part.Position).Magnitude)
-                text.Position = Vector2.new(vector.X, vector.Y)
-                text.Text = name .. " [" .. tostring(distance) .. "m]"
-                text.Visible = true
-            else
-                text.Visible = false
-            end
-        else
-            text.Visible = false
+-- Auto Click (Usando VirtualUser para simular clique de tela)
+local function AutoClick()
+    task.spawn(function()
+        while _G.AutoFarm do
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton1(Vector2.new())
+            task.wait(0.1)
         end
     end)
 end
 
--- Exemplo de injeção do ESP em frutas (Basta chamar a função quando spawnar)
--- CreateESP(workspace.Fruits.BiteFruit.Handle, "Bite Fruit", Color3.fromRGB(255, 50, 50))
-
 -- ==========================================
--- 4. SERVER HOP PERSISTENTE (.json)
+-- 4. LÓGICA DO BOTÃO
 -- ==========================================
-local function SalvarE PularServidor()
-    local fileName = "Hop_History.json"
-    local history = {}
-    
-    -- Verifica se o arquivo existe e lê os servidores antigos
-    if isfile and isfile(fileName) then
-        local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(fileName)) end)
-        if success then history = decoded end
-    end
-    
-    -- Registra o servidor atual para não voltar nele
-    history[game.JobId] = true
-    if writefile then
-        writefile(fileName, HttpService:JSONEncode(history))
-    end
-    
-    -- Lógica da requisição HTTP para o Roblox puxando um novo JobId entraria aqui
-    print("Histórico salvo localmente. Iniciando salto de servidor...")
-end
-
--- ==========================================
--- 5. LÓGICA DOS BOTÕES
--- ==========================================
-_G.AutoFarm = false
-
 ToggleFarm.MouseButton1Click:Connect(function()
     _G.AutoFarm = not _G.AutoFarm
+    
     if _G.AutoFarm then
         ToggleFarm.Text = "Auto-Farm: ON"
-        ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 120, 40)
+        ToggleFarm.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
         
-        -- Aqui entra o seu loop de movimentação (Ex: TweenService ou Bézier)
-        task.spawn(function()
-            while _G.AutoFarm do
-                task.wait(0.1)
-                -- print("Farm rodando...")
+        -- Equipa a ferramenta de combate (Melee ou Espada)
+        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool.ToolTip == "Sword") then
+                LocalPlayer.Character.Humanoid:EquipTool(tool)
+                break
             end
-        end)
+        end
+        
+        AutoClick()
     else
         ToggleFarm.Text = "Auto-Farm: OFF"
-        ToggleFarm.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        ToggleFarm.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     end
 end)
