@@ -1,127 +1,168 @@
---[[
-    Blox Fruits - Auto Farm Funcional Level 1-10 (Starter -> Jungle)
-    Otimizado para Delta Executor (Uso de VirtualUser e Remote Direto)
-]]
+-- ==========================================================
+-- BLOX FRUITS - STARTER TO JUNGLE AUTO FARM (LV 1 a 10)
+-- Executor: Delta Executor | Sea 1
+-- ==========================================================
+
+if getgenv().RunningStarterFarm then
+    getgenv().RunningStarterFarm = false
+    task.wait(0.5)
+end
+getgenv().RunningStarterFarm = true
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- Configurações e Coordenadas
-local SETTINGS = {
-    MaxLevel = 10,
-    QuestNPC = CFrame.new(1059.3, 16.5, 1549.5),
-    MobSpawn = CFrame.new(1159.2, 16.5, 1640.8),
-    JungleIsland = CFrame.new(-1251.1, 11.8, 3812.3)
-}
+-- Função de segurança para pegar o Character e HumanoidRootPart
+local function getRoot()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        return char.HumanoidRootPart
+    end
+    return nil
+end
 
+-- Função de Tween / Teleporte suave para posições
+local function smoothTween(targetCFrame, speed)
+    local root = getRoot()
+    if not root then return end
+    
+    speed = speed or 250
+    local distance = (root.Position - targetCFrame.Position).Magnitude
+    local timeTaken = distance / speed
+    local startTime = tick()
+    
+    local startCFrame = root.CFrame
+    while tick() - startTime < timeTaken do
+        if not getgenv().RunningStarterFarm then break end
+        local alpha = (tick() - startTime) / timeTaken
+        root.CFrame = startCFrame:Lerp(targetCFrame, alpha)
+        RunService.Heartbeat:Wait()
+    end
+    if getRoot() then
+        getRoot().CFrame = targetCFrame
+    end
+end
+
+-- Obter Level atual
 local function getLevel()
-    local data = LocalPlayer:FindFirstChild("Data")
-    if data and data:FindFirstChild("Level") then
-        return data.Level.Value
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+    if leaderstats and leaderstats:FindFirstChild("Level") then
+        return leaderstats.Level.Value
     end
     return 1
 end
 
-local function hasActiveQuest()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui and playerGui:FindFirstChild("Main") then
-        local quest = playerGui.Main:FindFirstChild("Quest")
-        if quest and quest.Visible then
-            return true
-        end
+-- Detectar se é Marinha ou Pirata baseado na Equipe
+local function getTeam()
+    if LocalPlayer.Team and LocalPlayer.Team.Name == "Marine" then
+        return "Marine"
+    else
+        return "Pirate"
     end
-    return false
 end
 
-local function tweenTo(targetCFrame, speed)
-    speed = speed or 350
-    if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
-    local distance = (HumanoidRootPart.Position - targetCFrame.Position).Magnitude
-    local time = distance / speed
-    local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
-    tween:Play()
-    return tween
-end
+-- Coordenadas de referência (Sea 1)
+-- NPC de missão dos bandidos (Bandit Quest Giver)
+local QUEST_GIVERS = {
+    Pirate = CFrame.new(1062.0, 16.5, 1424.8),  -- Perto da Pirate Starter
+    Marine = CFrame.new(-2708.2, 11.9, 2045.5)   -- Perto da Marine Starter
+}
 
--- Função de ataque compatível com Delta (VirtualUser)
-local function attackMob()
+-- Localização dos Bandits Lv. 5
+local BANDIT_SPAWN = CFrame.new(1054.5, 16.5, 1548.8)
+
+-- Ilha Jungle (Destino ao atingir Level 10)
+local JUNGLE_ISLAND = CFrame.new(-1249.8, 11.9, 327.7)
+
+-- Função para simular clique de ataque
+local function attack()
     pcall(function()
-        VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(1000, 1000))
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)
         task.wait(0.05)
-        VirtualUser:Button1Up(Vector2.new(1000, 1000))
-        
-        -- Dispara skills automaticamente (Z, X, C)
-        for _, key in ipairs({"z", "x", "c"}) do
-            game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
+        vim:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+-- Função para usar Skills (Z, X, C, V)
+local function useSkills()
+    pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
+            vim:SendKeyEvent(true, key, false, game)
             task.wait(0.05)
-            game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
+            vim:SendKeyEvent(false, key, false, game)
         end
     end)
 end
 
--- Loop Principal
+-- Loop Principal de Automação
 task.spawn(function()
-    print("[OmegaCore]: Iniciando Auto Farm Direto...")
+    print("[Starter Farm]: Script iniciado com sucesso!")
     
-    while true do
-        task.wait(0.3)
+    while getgenv().RunningStarterFarm do
+        task.wait(0.5)
+        local currentLevel = getLevel()
         
-        pcall(function()
-            local currentLevel = getLevel()
-            Character = LocalPlayer.Character
-            if not Character or not Character:FindFirstChild("HumanoidRootPart") then return end
-            HumanoidRootPart = Character.HumanoidRootPart
+        -- Verificar se já atingiu o level 10
+        if currentLevel >= 10 then
+            print("[Starter Farm]: Level 10 atingido! Indo para a Ilha Jungle...")
+            smoothTween(JUNGLE_ISLAND, 300)
+            task.wait(1)
+            print("[Starter Farm]: Chegou na Ilha Jungle. Encerrando script.")
+            getgenv().RunningStarterFarm = false
+            break
+        end
+        
+        -- Checar se tem missão ativa
+        local questGui = LocalPlayer.PlayerGui:FindFirstChild("Main") and LocalPlayer.PlayerGui.Main:FindFirstChild("Quest")
+        local hasActiveQuest = questGui and questGui.Visible
+        
+        if not hasActiveQuest then
+            -- 1. Ir até o Doador de Missão
+            local team = getTeam()
+            local giverPos = QUEST_GIVERS[team] or QUEST_GIVERS["Pirate"]
             
-            if currentLevel < SETTINGS.MaxLevel then
-                if not hasActiveQuest() then
-                    -- Vai até o NPC e invoca a quest diretamente pelo Remote
-                    tweenTo(SETTINGS.QuestNPC, 350)
-                    if (HumanoidRootPart.Position - SETTINGS.QuestNPC.Position).Magnitude < 15 then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
-                        task.wait(1)
-                    end
-                else
-                    -- Procura inimigos ativos na pasta Enemies
-                    local targetMob = nil
-                    local shortestDistance = math.huge
+            print("[Starter Farm]: Indo pegar a missão de Bandidos...")
+            smoothTween(giverPos, 300)
+            task.wait(0.5)
+            
+            -- Interagir com o NPC de missão (Remotamente via ReplicatedStorage se disponível, ou encostando)
+            pcall(function()
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("StartQuest", "BanditQuest1", 1)
+            end)
+            task.wait(0.8)
+        else
+            -- 2. Ir até os Bandits Lv.5 e farmar
+            local root = getRoot()
+            if root then
+                -- Posicionar levemente acima ou próximo aos bandidos para bater com segurança
+                smoothTween(BANDIT_SPAWN + Vector3.new(0, 5, 0), 300)
+                
+                -- Ativar ataques e skills nos NPCs próximos
+                for i = 1, 5 do
+                    if not getgenv().RunningStarterFarm then break end
                     
-                    if workspace:FindFirstChild("Enemies") then
-                        for _, mob in pairs(workspace.Enemies:GetChildren()) do
-                            if mob.Name == "Bandit" and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                                local mobPart = mob:FindFirstChild("HumanoidRootPart")
-                                if mobPart then
-                                    local dist = (HumanoidRootPart.Position - mobPart.Position).Magnitude
-                                    if dist < shortestDistance then
-                                        shortestDistance = dist
-                                        targetMob = mobPart
-                                    end
-                                end
+                    -- Puxar / teleportar bandidos próximos para perto do player (opcional para agilizar)
+                    for _, mob in ipairs(Workspace.Enemies:GetChildren()) do
+                        if mob:FindFirstChild("Humanoid") and mob:FindFirstChild("HumanoidRootPart") and mob.Humanoid.Health > 0 then
+                            if (mob.HumanoidRootPart.Position - BANDIT_SPAWN.Position).Magnitude < 100 then
+                                mob.HumanoidRootPart.CFrame = root.CFrame * CFrame.new(0, 0, -3)
                             end
                         end
                     end
                     
-                    if targetMob then
-                        -- Fica em cima do mob e ataca
-                        tweenTo(targetMob.CFrame + Vector3.new(0, 5, 0), 350)
-                        attackMob()
-                    else
-                        -- Se não achar nenhum mob vivo, vai para o spawn aguardar
-                        tweenTo(SETTINGS.MobSpawn + Vector3.new(0, 15, 0), 300)
+                    attack()
+                    if i % 2 == 0 then
+                        useSkills()
                     end
+                    task.wait(0.2)
                 end
-            else
-                print("[OmegaCore]: Level 10 alcançado! Teletransportando para a Ilha Jungle...")
-                local t = tweenTo(SETTINGS.JungleIsland + Vector3.new(0, 40, 0), 400)
-                t.Completed:Wait()
-                script:Destroy()
             end
-        end)
+        end
     end
 end)
